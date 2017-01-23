@@ -1,0 +1,513 @@
+#!/bin/bash
+
+: ${MESOS_PAGINATE_SIZE:=1000}
+set -e
+
+help() {
+  cat <<EOF
+Usage: ${INVOCATION} <cmd> [<options...>]
+
+Commands:
+
+  - curl         : curl helper for mesos; first arg URI, rest forwarded to curl.
+  - executor-url : show the executor-url for a given task
+  - inspect      : inspect a mesos task
+  - ps           : view mesos processes
+  - sandbox      : show the sandbox for a given task
+
+For help on commands, $0 <cmd> --help
+
+EOF
+}
+
+
+sandbox-help() {
+  cat <<EOF
+Output the sandbox path for the mesos task
+
+usage: ${INVOCATION} <id>
+
+  Options:
+
+  -u, --url   - Output a URL to browse the mesos sandbox from your browser
+
+  --help      - This help
+EOF
+}
+
+executor-url-help() {
+  cat <<EOF
+Output the URL for the executor
+
+usage: ${INVOCATION} <id>
+
+  Options:
+
+  -u, --url   - Output a URL to browse the mesos sandbox from your browser
+
+  --help      - This help
+EOF
+}
+
+
+ps-help() {
+  cat <<EOF
+List mesos tasks in the cluster.
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --all, -a                    - List all mesos tasks
+
+  --limit, -l <n>              - Limit output (note: this limit is applied
+                                 pre-filter, pre-sort)
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default    - Group: id,host,state,started
+      id         - Task id
+      n,name     - Name of container
+      cpus       - # of cpus assigned to task
+      mem        - # of ram (MB) assigned to task
+      gpus       - # of gpus assigned to task
+      disk       - # of disk (MB) assigned to task
+      ports      - ports assigned to process
+      s,state    - Status off task
+      t,type     - Type of container (docker or not)
+      image      - If docker, what image is used
+      h,host     - Host on which container is running
+      ip         - IP address of task
+      ips        - IP addresses of task
+      url        - The executor URL for the task
+      started    - Start time
+      finished   - Finish time
+EOF
+}
+
+inspect-help() {
+  cat <<EOF
+Show the full JSON details for a mesos task. Paginates backwards by
+MESOS_PAGINATE_SIZE (default 1000) until it finds the task.
+
+usage: ${INVOCATION} <id>
+
+  Options:
+
+  --color         - Force color output. By default, color output is enabled if
+                    STDOUT is a terminal.
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
+mesos-curl-help() {
+  cat <<EOF
+Curl helper for mesos. Provides host, credentials; sets Content-Type to
+application/json. Gregarious fellow, hit of the party, source of jealousy.
+
+usage: ${INVOCATION} <uri> [curl args...]
+
+Options:
+
+   --help          - This help (when passed as first arg)
+
+See curl --help for description of other options
+
+EOF
+}
+
+mesos-env() {
+  cat /etc/mesos/.credentials  | jq '.credentials[] | select(.principal == "slave") | "MESOS_PRINCIPAL=" + .principal + "; MESOS_SECRET=" + .secret' -r
+  cat /etc/mesos-slave/hostname | sed -E 's|^[^.]+\.([^.]+)\..*|MESOS_DATACENTER=\1|'
+}
+
+mesos-curl() {
+  if [ "$1" = "--help" ] || [ -z "$1" ]; then
+    mesos-curl-help
+  fi
+
+  URI=$1
+  shift
+
+  echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | curl -K - -s -H "Content-Type: application/json" ${MESOS_MASTER_URL}${URI} "${@}"
+  return 1
+}
+
+slave-map() {
+  mesos-curl /state-summary | jq '.slaves | map({ (.id) : .hostname }) | add'
+}
+
+
+
+join-str() {
+  local delimiter="$1"
+  shift
+  local OUTPUT=""
+  for ((n=1; n<=$#; n++)); do
+    if [ "$n" -ne 1 ]; then
+      OUTPUT+="${delimiter}"
+    fi
+    OUTPUT+="${!n}"
+  done
+  echo -n "$OUTPUT"
+}
+
+inspect() {
+  declare -a OTHERARGS
+  local COLOR_OUTPUT=""
+  if [ -t 1 ]; then
+    COLOR_OUTPUT="--color-output"
+  else
+    COLOR_OUTPUT="--monochrome-output"
+  fi
+
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        inspect-help
+        exit 0
+        ;;
+      --color)
+        COLOR_OUTPUT="--color-output"
+        ;;
+      --no-color)
+        COLOR_OUTPUT="--monochrome-output"
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        inspect-help
+        exit 1
+        ;;
+      *)
+        OTHERARGS+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#OTHERARGS[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a task id; got ${OTHERARGS[@]}"
+    inspect-help
+    exit 1
+  fi
+
+
+  # search backwards until we find the task; this is a bit complex because mesos has not way to fetch a task by id
+  local OFFSET=0
+  local RESULT=""
+  local CONTINUE=1
+  local SLAVE_MAP=$(slave-map)
+
+  while [ $CONTINUE = 1 ]; do
+    RESULT="$(jq -s '.[0].tasks | {"count": (. | length), "matches": (. | map(select(.id == "'"${OTHERARGS[0]}"'")))}' --monochrome-output -r <(mesos-curl "/tasks?limit=$MESOS_PAGINATE_SIZE&offset=$OFFSET"))"
+    if [[ "$(echo "$RESULT" | jq .count -r)" -lt "$MESOS_PAGINATE_SIZE" ]]; then
+      CONTINUE=0
+    fi
+
+    FORMATTED_RESULTS="$(jq $COLOR_OUTPUT '.[0] as $slaves | .[1].matches[] | ([{ "id": .id, "name": .name, "host": $slaves[.slave_id] }, .] | add)' -s <(echo "$SLAVE_MAP") <(echo "$RESULT"))"
+
+    if [ -z "$FORMATTED_RESULTS" ]; then
+      OFFSET=$((OFFSET + MESOS_PAGINATE_SIZE))
+    else
+      echo "$FORMATTED_RESULTS"
+      return 0
+    fi
+  done
+  return 1
+}
+
+executor-url() {
+  declare -a OTHERARGS
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        executor-url-help
+        exit 0
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        executor-url-help
+        exit 1
+        ;;
+      *)
+        OTHERARGS+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#OTHERARGS[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a task id; got ${OTHERARGS[@]}"
+    executor-url-help
+    exit 1
+  fi
+
+  inspect "${OTHERARGS[0]}" | jq '"'$MESOS_URL'/#/agents/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + (if .executor_id == "" then .id else .executor_id end)' -r
+}
+
+
+
+sandbox() {
+  declare -a OTHERARGS
+  SHOW_URL=false
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        sandbox-help
+        exit 0
+        ;;
+      -u|--url)
+        SHOW_URL=true
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        sandbox-help
+        exit 1
+        ;;
+      *)
+        OTHERARGS+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#OTHERARGS[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a task id; got ${OTHERARGS[@]}"
+    sandbox-help
+    exit 1
+  fi
+
+  mesos-vars() {
+    echo "$1"| sed -E 's:^(.*)/slaves/([^/]+)/frameworks/([^/]+)/executors/([^/]+)/runs/([^/]+).*:MESOS_WORK=\1; AGENT_ID=\2; FRAMEWORK_ID=\3; EXECUTOR_ID=\4; RUN_ID=\5; FULL_PATH="\0":g' | egrep ^MESOS_WORK
+  }
+
+
+  ID="${OTHERARGS[0]}"
+  inspect "$ID" --no-color | jq '"https://" + .host + ":5051/state"' -r | while read url; do
+    curl -s "$url" | jq '[.frameworks, .completed_frameworks] | add | map([.executors, .completed_executors]) | flatten | map( { "directory": .directory, "tasks": ([.tasks, .queued_tasks, .completed_tasks] | add | map(select(.id == "'"${ID}"'"))) })[] | select(.tasks | length > 0) | .directory' -r | while read sandbox_path; do
+      if $SHOW_URL; then
+        eval "$(mesos-vars "$sandbox_path")"
+        echo $MESOS_URL/#/agents/${AGENT_ID}/browse?path=$(echo $FULL_PATH | sed "s|/|%2f|g")
+      else
+        echo $sandbox_path
+      fi
+    done
+  done
+}
+
+ps() {
+  declare -a OTHERARGS
+  declare -a COLUMNS
+  declare -a HEADERS
+  declare -a SELECTS
+
+  COLUMN_LIST="id host state started"
+  NO_HEADER=false
+  NO_ALIGN=false
+  LIMIT=500
+  ALL=false
+  SORT_COLS=
+
+  ALIGN_CMD=$'| column -t -s "\t"'
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -a|--all)
+        ALL=true
+        ;;
+      -s|--sort)
+        SORT_COLS=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      -l|--limit)
+        LIMIT=$1
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        ps-help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        ps-help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "$@"; do
+      case "$col" in
+        default)
+          interprete-cols id host state started
+          ;;
+        id)
+          HEADERS+=(id)
+          COLUMNS+=(.id)
+          ;;
+        cpus)
+          HEADERS+=(cpus)
+          COLUMNS+=(.resources.cpus)
+          ;;
+        mem)
+          HEADERS+=(mem)
+          COLUMNS+=(.resources.mem)
+          ;;
+        gpus)
+          HEADERS+=(gpus)
+          COLUMNS+=(.resources.gpus)
+          ;;
+        started)
+          HEADERS+=(started)
+          COLUMNS+=('((.statuses | map(select(.state == "TASK_RUNNING"))) | map(.timestamp | todate)[0] // "")')
+          ;;
+        finished)
+          HEADERS+=(finished)
+          COLUMNS+=('((.statuses | map(select(.state != "TASK_RUNNING"))) | map(.timestamp | todate)[0] // "")')
+          ;;
+        ports)
+          HEADERS+=(ports)
+          COLUMNS+=(.resources.ports)
+          ;;
+        disk)
+          HEADERS+=(disk)
+          COLUMNS+=(.resources.disk)
+          ;;
+        s|state)
+          HEADERS+=(state)
+          COLUMNS+=(.state)
+          ;;
+        t|type)
+          HEADERS+=(type)
+          COLUMNS+=('.container.type // ""')
+          ;;
+        n|name)
+          HEADERS+=(name)
+          COLUMNS+=(.name)
+          ;;
+        image)
+          HEADERS+=(image)
+          COLUMNS+=('.container.docker.image // ""')
+          ;;
+        h|host)
+          HEADERS+=(host)
+          COLUMNS+=('$slaves[.slave_id]')
+          ;;
+        ip)
+          HEADERS+=(ip)
+          COLUMNS+=('(.statuses | map(.container_status.network_infos[] | .ip_addresses[] | .ip_address)[0])')
+          ;;
+        ips)
+          HEADERS+=(ips)
+          COLUMNS+=('(.statuses | map(.container_status.network_infos[] | .ip_addresses[] | .ip_address) | join(", "))')
+          ;;
+        url)
+          HEADERS+=(url)
+          COLUMNS+=('"'$MESOS_URL'/#/agents/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + ((if .executor_id == "" then .id else .executor_id end) | @uri)')
+          ;;
+        *)
+          echo "Unknown column: $col" 1>&2
+          ps-help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  # hack: hijack interprete-cols to get the column expression
+  interprete-cols $SORT_COLS
+  SORT_EXPS=("${COLUMNS[@]}")
+  COLUMNS=()
+  HEADERS=()
+  interprete-cols $COLUMN_LIST
+  if ! $ALL; then
+    SELECTS+=('select(.state == "TASK_RUNNING")')
+  fi
+
+  output-it() {
+    if ! $NO_HEADER; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+
+    SELECT_EXP=""
+    for expr in "${SELECTS[@]}"; do
+      SELECT_EXP+="| ${expr}"
+    done
+
+    if [ "${#SORT_EXPS[@]}" -ne 0 ]; then
+      SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
+    fi
+
+    jq -s '.[0] as $slaves | .[1] | .tasks '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r <(slave-map) <(mesos-curl "/tasks?limit=$LIMIT")
+  }
+
+  if $NO_ALIGN; then
+    output-it
+  else
+    output-it | column -t -s $'\t'
+  fi
+}
+
+
+progname=$(basename "$0")
+if [ "$progname" != "mesos-cli" ]; then
+  cmd=${progname#mesos-}
+  INVOCATION="$0"
+else
+  cmd=$1
+  shift || (help; exit 1)
+  INVOCATION="$0 $cmd"
+fi
+
+if [ -z "$cmd" ]; then
+  help
+  exit 1
+fi
+
+eval $(mesos-env)
+: ${MESOS_MASTER_URL:=https://leader.${MESOS_DATACENTER}.mesos:5050}
+: ${MESOS_GUI_URL:=http://leader.mesos:5050}
+
+case "$cmd" in
+  curl) mesos-curl "$@" ;;
+  ps) ps "$@" ;;
+  executor-url) executor-url "$@" ;;
+  inspect) inspect "$@" ;;
+  sandbox) sandbox "$@" ;;
+  curl) mesos-curl "$@" ;;
+  *) echo "unrecognized command: $cmd"; help; exit 1 ;;
+esac

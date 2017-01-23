@@ -1,0 +1,115 @@
+#!/bin/bash
+
+_comp_mesos_join-str() {
+  delimiter="$1"
+  shift
+  OUTPUT=""
+  for ((n=1; n<=$#; n++)); do
+    if [ "$n" -ne 1 ]; then
+      OUTPUT+="${delimiter}"
+    fi
+    OUTPUT+="${!n}"
+  done
+  echo -n "$OUTPUT"
+}
+
+_comp_mesos_curl() {
+  case "${prev}" in
+    curl)
+      COMPREPLY+=( $(compgen -W "/files/browse /files/browse.json /files/debug /files/debug.json /files/download /files/download.json /files/read /files/read.json /logging/toggle /api/v1 /api/v1/scheduler /create-volumes /destroy-volumes /flags /frameworks /health /machine/down /machine/up /maintenance/schedule /maintenance/status /quota /redirect /reserve /roles /roles.json /slaves /state /state-summary /state.json /tasks /tasks.json /teardown /unreserve /weights /metrics/snapshot /profiler/start /profiler/stop /registrar(id)/registry /system/stats.json /version" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_mesos_ps() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--all -a --limit -l --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
+      return 0
+      ;;
+  esac
+
+  case "${prev}" in
+    -c|--columns|-s|--sort)
+      local cols curcol others n
+      cols=($(echo "$cur" | tr ',' ' '))
+      if [ ! ${#cols[@]} = 0 ]; then
+        if [ "${cur:${#cur}-1}" = "," ]; then
+          cols+=("")
+        fi
+
+        curcol=${cols[${#cols[@]}-1]}
+        others=$(_comp_mesos_join-str , "${cols[@]:0:${#cols[@]}-1}")
+      else
+        others=""
+        curcol=""
+      fi
+
+      COMPREPLY+=( $(compgen -W "default id name cpus mem gpus disk ports state type image host ip ips url started finished" -- "${curcol}"))
+      if [ ! -z "$others" ]; then
+        for ((n=0; n<${#COMPREPLY[@]}; n++)); do
+          COMPREPLY[$n]="${others},${COMPREPLY[n]}"
+        done
+      fi
+
+      return 0
+      ;;
+  esac
+}
+
+_comp_mesos_sandbox() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--u --url" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_mesos_inspect() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--u --url" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_mesos() {
+  local cur prev words cword
+  _init_completion -n : || return
+  COMPREPLY=()
+
+  if [ ${COMP_CWORD} = 1 ]; then
+    COMPREPLY=( $(compgen -W "curl executor-url inspect ps sandbox" -- ${cur}) )
+
+    return 0
+  fi
+
+  cmd=${COMP_WORDS[1]}
+
+  case "$cmd" in
+    executor-url)
+      _comp_mesos_executor_url
+      ;;
+    inspect)
+      _comp_mesos_inspect
+      ;;
+    curl)
+      _comp_mesos_curl
+      ;;
+    ps)
+      _comp_mesos_ps
+      ;;
+    sandbox)
+      _comp_mesos_sandbox
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+}
+complete  -o nospace -o bashdefault -F _comp_mesos mesos
+complete  -o nospace -o bashdefault -F _comp_mesos mesos-cli

@@ -1,0 +1,519 @@
+#!/bin/bash
+
+ps-help() {
+  cat <<EOF
+Like docker ps, but has many more columns available. It calls docker ps, then
+runs docker inspect on each returned image, allowing more fields, such as cpu,
+to be displayed.
+
+usage: $0 ps [options...]
+
+  Options:
+
+  --all, -a                    - List all containers, instead of those currently
+                                 running
+
+  --filter, -f <filter-string> - additional docker filter commands to
+                                 'docker ps'
+
+  --image, -i <image>          - show containers with the specified image as an
+                                 ancestor
+
+  --columns, -c <col1,col2,..> - columns to show. See below:
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default    - Group: id,image,state,ip
+      id         - The container's id
+      n,name     - The container's name
+      i,image    - The container's image (Config.Image)
+      started    - The start/begin time of the container (State.StartedAt)
+      finished   - The finished time of the container (State.FinishedAt)
+      s,state    - The state of the container. If exited, then show exit
+                   status. Also, if oom killed, indicate it.
+      network    - Container's assigned network mode.
+      ip         - The IP address for container's primary network config.
+      ips        - The IP addresses for all of the container's network config
+      upper-path - For overlay images, the path where the container writes new
+                   files.
+      app-id     - Marathon / Chronos / etc. app id / job name
+      launcher   - Framework / launcher responsible for starting the container
+      task-id    - Mesos task id
+      forwards   - Port forwards
+EOF
+}
+
+logs-help() {
+  cat <<EOF
+Convenient helper to output logs from mesos.
+
+usage: $0 logs [options...] <image>
+
+  Options:
+
+  --follow, -f  - will follow the logs in the sandbox directory/$GLOB
+  --glob, -g    - defines the glob used to find logs. to print everything in the
+                  directory, use '*' or just stderr use 'stderr'
+  --lines, -n   - identical to the tail param and is passed to the tail command
+  --help        - This help
+EOF
+}
+
+join-help() {
+  cat <<EOF
+Short-hand process to open a shell for a running docker container. If bash is
+available, uses that. Otherwise uses sh.
+
+usage: $0 join <image>
+
+  Options:
+
+  --help      - This help
+EOF
+}
+
+url-help() {
+  cat <<EOF
+Output the mesos URL for a mesos-launched docker.
+
+usage: $0 sandbox <image>
+
+  Options:
+
+  --help      - This help
+EOF
+}
+
+sandbox-help() {
+  cat <<EOF
+Output the sandbox path for a mesos-launched docker.
+
+usage: $0 sandbox <image>
+
+  Options:
+
+  -u, --url   - Output a URL to browse the mesos sandbox from your browser
+
+  --help      - This help
+EOF
+}
+
+join-str() {
+  delimiter="$1"
+  shift
+  OUTPUT=""
+  for ((n=1; n<=$#; n++)); do
+    if [ "$n" -ne 1 ]; then
+      OUTPUT+="${delimiter}"
+    fi
+    OUTPUT+="${!n}"
+  done
+  echo -n "$OUTPUT"
+}
+
+
+ps-cmd() {
+  declare -a OTHERARGS
+  HEADERS=$'Id'
+  COLFORMAT=""
+
+  COLUMN_LIST=default
+  ALIGN_CMD=$'| column -t -s "\t"'
+
+  declare -a COLUMNS
+  declare -a HEADERS
+
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -a|--all)
+        PSARGS+=(-a)
+        ;;
+      -i|--image)
+        PSARGS+=(--filter "ancestor=$1")
+        shift
+        ;;
+      -f|--filter)
+        PSARGS+=(--filter "$1")
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        ps-help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        ps-help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "${@}"; do
+      case "$col" in
+        default)
+          interprete-cols id image app-id state ip
+          ;;
+        n|name)
+          HEADERS+=(name)
+          COLUMNS+=('{{.Name}}')
+          ;;
+        id)
+          HEADERS+=(id)
+          COLUMNS+=('{{printf "%.7s" .Id}}')
+          ;;
+        i|image)
+          HEADERS+=('image')
+          COLUMNS+=('{{.Config.Image}}')
+          ;;
+        started)
+          HEADERS+=('startedAt')
+          COLUMNS+=('{{.State.StartedAt}}')
+          ;;
+        finished)
+          HEADERS+=('finishedAt')
+          COLUMNS+=('{{.State.FinishedAt}}')
+          ;;
+        s|state)
+          HEADERS+=('state')
+          COLUMNS+=('{{if eq .State.Status "running" }}Running{{else}}{{.State.Status}} - {{.State.ExitCode}}{{ if .State.OOMKilled}}(oom-killed){{end}}{{end}}')
+          ;;
+        network)
+          HEADERS+=('network')
+          COLUMNS+=('{{.HostConfig.NetworkMode}}')
+          ;;
+        ips)
+          HEADERS+=('ips')
+          COLUMNS+=('{ {{range $key, $value := .NetworkSettings.Networks}}{{$key}}: "{{$value.IPAddress}}" {{end}}}')
+          ;;
+
+        ip)
+          HEADERS+=('ip')
+          COLUMNS+=('{{ if eq .HostConfig.NetworkMode "default" }}{{range $key, $value := .NetworkSettings.Networks}}{{$value.IPAddress}}{{end}}{{else}}{{index .NetworkSettings.Networks .HostConfig.NetworkMode "IPAddress"}}{{end}}')
+
+          ;;
+        upper-path)
+          HEADERS+=(upper-path)
+          COLUMNS+=('{{ if eq .GraphDriver.Name "overlay"}}{{.GraphDriver.Data.UpperDir}}{{end}}')
+          ;;
+        launcher)
+          HEADERS+=(launcher)
+          COLUMNS+=('{{range .Config.Env}}{{ $parts := (split . "=") }}{{ if eq (index $parts 0) "CHRONOS_JOB_NAME" }}chronos{{end}}{{ if eq (index $parts 0) "MARATHON_APP_ID" }}marathon{{end}}{{end}}')
+          ;;
+        app-id)
+          HEADERS+=(app-id)
+          COLUMNS+=('{{range .Config.Env}}{{ $parts := (split . "=") }}{{ if eq (index $parts 0) "CHRONOS_JOB_NAME" }}{{index $parts 1}}{{end}}{{ if eq (index $parts 0) "MARATHON_APP_ID" }}{{index $parts 1}}{{end}}{{end}}')
+          ;;
+        task-id|mesos-task-id)
+          HEADERS+=(task-id)
+          COLUMNS+=('{{range .Config.Env}}{{ $parts := (split . "=") }}{{ if eq (index $parts 0) "MESOS_TASK_ID" }}{{index $parts 1}}{{end}}{{end}}')
+          ;;
+        forwards)
+          HEADERS+=(forwards)
+          COLUMNS+=('{{range $key, $value := .NetworkSettings.Ports}}{{if $value}}{{range $idx, $portMap := $value}}{{$portMap.HostIp}}:{{$portMap.HostPort}}{{if not (eq 0 $idx)}},{{end}}{{end}}->{{$key}}{{end}}{{end}}')
+          ;;
+        *)
+          echo "Unknown column: $col" 1>&2
+          ps-help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  interprete-cols $COLUMN_LIST
+  output_it() {
+    if [ ! $NO_HEADER ]; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+    docker ps "${PSARGS[@]}" --format '{{.ID}}' | xargs -I {} docker inspect --format "$(join-str $'\t' "${COLUMNS[@]}")" {}
+  }
+
+  if [ $NO_ALIGN ]; then
+    output_it
+  else
+    output_it | column -t -s $'\t'
+  fi
+}
+
+find-mesos-with-docker-image(){
+  ID=$1
+  docker inspect --format '{{range .Mounts}}{{.Source}}={{.Destination}}^M{{end}}' $ID | tr '^M' '\n' | grep 'mesos/sandbox' | cut -d '=' -f 1
+}
+
+logs() {
+  declare -a OTHERARGS
+  declare -a TAILARGS
+
+
+  LINES='+0'
+  GLOB='stdout'
+  FOLLOW=0
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -g|--glob)
+        GLOB="$1"
+        shift
+        ;;
+      -f|--follow)
+        FOLLOW=1
+        ;;
+      -n|--lines)
+        LINES="$1"
+        shift
+        ;;
+      --help)
+        logs-help
+        exit 0
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        logs-help
+        exit 1
+        ;;
+      *)
+        OTHERARGS+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#OTHERARGS[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a container id; got ${OTHERARGS[@]}"
+    exit 1
+  fi
+
+  CONTAINER_ID=${OTHERARGS[0]}
+  SANDBOX=$(find-mesos-with-docker-image "$CONTAINER_ID")
+  echo $SANDBOX
+
+  if [ -z "$SANDBOX" ]; then
+    echo "$CONTAINER_ID is not a mesos managed container; proxying to docker logs" 2>&1
+
+    if [ ! "$GLOB" = "stdout" ]; then
+      echo "GLOB argument is not supported for non mesos containers; cowardly refusing to run." 2>&1
+      exit 1
+    fi
+
+    if [ "$FOLLOW" = 1 ]; then
+      TAILARGS+=(--follow)
+    fi
+
+    if [ ! "$LINES" = "+0" ]; then
+      TAILARGS+=(--tail $LINES)
+    fi
+
+    exec docker logs $CONTAINER_ID "${TAILARGS[@]}"
+  else
+    if [ "$FOLLOW" = 1 ]; then
+      TAILARGS+=('-F')
+    fi
+
+    trap 'echo $SANDBOX' KILL INT
+
+    FINAL_CMD="tail ${TAILARGS[@]} -n $LINES $SANDBOX/$GLOB"
+    echo $FINAL_CMD
+    $FINAL_CMD
+  fi
+}
+
+mesos-vars() {
+  docker inspect $1 | jq '.[] | .Mounts[] | .Source' -r | sed -E 's:^(.*)/slaves/([^/]+)/frameworks/([^/]+)/executors/([^/]+)/runs/([^/]+).*:MESOS_WORK=\1; AGENT_ID=\2; FRAMEWORK_ID=\3; EXECUTOR_ID=\4; RUN_ID=\5; FULL_PATH="\0":g' | egrep ^MESOS_WORK
+}
+
+urlencode() {
+  local length="${#1}"
+  for (( i = 0; i < length; i++ )); do
+    local c="${1:i:1}"
+    case $c in
+      [a-zA-Z0-9.~_-]) printf "$c" ;;
+    *) printf "$c" | xxd -p -c1 | while read x;do printf "%%%s" "$x";done
+  esac
+done
+}
+
+url() {
+  declare -a OTHERARGS
+  . /etc/docker-host-env
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        url-help
+        exit 0
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        url-help
+        exit 1
+        ;;
+      *)
+        OTHERARGS+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#OTHERARGS[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a container id; got ${OTHERARGS[@]}"
+    url-help
+    exit 1
+  fi
+
+  eval "$(mesos-vars ${OTHERARGS[0]})"
+
+  if [ -z "$RUN_ID" ]; then
+    echo "Docker container ${OTHERARGS[0]} does not appear to be a mesos managed container"
+  fi
+
+  echo ${MESOS_GUI_URL}/#/agents/$AGENT_ID/frameworks/$FRAMEWORK_ID/executors/$(urlencode "$EXECUTOR_ID")
+}
+
+sandbox() {
+  declare -a OTHERARGS
+  SHOW_URL=false
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        sandbox-help
+        exit 0
+        ;;
+      -u|--url)
+        SHOW_URL=true
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        sandbox-help
+        exit 1
+        ;;
+      *)
+        OTHERARGS+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#OTHERARGS[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a container id; got ${OTHERARGS[@]}"
+    sandbox-help
+    exit 1
+  fi
+
+  eval "$(mesos-vars ${OTHERARGS[0]})"
+  if [ -z "$RUN_ID" ]; then
+    echo "Docker container ${OTHERARGS[0]} does not appear to be a mesos managed container"
+  fi
+  if $SHOW_URL; then
+    . /etc/docker-host-env
+
+    echo ${MESOS_GUI_URL}/#/agents/${AGENT_ID}/browse?path=$(urlencode $FULL_PATH)
+  else
+    echo "$FULL_PATH"
+  fi
+}
+
+join-cmd() {
+  declare -a OTHERARGS
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        join-help
+        exit 0
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        join-help
+        exit 1
+        ;;
+      *)
+        OTHERARGS+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#OTHERARGS[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a container id; got ${OTHERARGS[@]}"
+    join-help
+    exit 1
+  fi
+
+  docker exec -it  "${OTHERARGS[0]}" sh -c "if [ -e /bin/bash ]; then exec /bin/bash; else exec /bin/sh; fi"
+}
+
+
+
+help() {
+  cat <<EOF
+Usage: $0 [cmd] [args]
+
+commands:
+
+     logs : View and tail mesos-launched docker containers.
+       ps : List docker processes. More columns and more helpful columns available.
+  sandbox : Output the mesos sandbox path.
+      url : Output the executor URL.
+     join : Short-hand process to open a shell for a running docker container.
+
+For help on commands, dicker [cmd] --help
+
+EOF
+}
+
+CMD=$1
+shift
+
+case "$CMD" in
+  --help)
+    help
+    exit 0
+    ;;
+  ps)
+    ps-cmd "${@}"
+    ;;
+  logs)
+    logs "${@}"
+    ;;
+  sandbox)
+    sandbox "${@}"
+    ;;
+  url)
+    url "${@}"
+    ;;
+  join)
+    join-cmd "${@}"
+    ;;
+  *)
+    echo "unknown command: $CMD"
+    help
+    exit 1
+    ;;
+esac
