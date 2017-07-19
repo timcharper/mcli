@@ -1,0 +1,6 @@
+source /usr/share/bash-completion/bash_completion
+source /usr/local/share/bash-completion/mesos-cli-completion
+source /usr/local/share/bash-completion/dicker-completion
+
+alias dr=dicker
+alias mcli=mesos-cli
