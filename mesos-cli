@@ -22,6 +22,7 @@ Commands:
   - executor-url : show the executor-url for a given task
   - inspect      : inspect a mesos task
   - ps           : view mesos processes
+  - frameworks   : view information about frameworks
   - sandbox      : show the sandbox for a given task
 
 For help on commands, $0 <cmd> --help
@@ -58,6 +59,58 @@ usage: ${INVOCATION} <id>
 EOF
 }
 
+frameworks-help() {
+  cat <<EOF
+List frameworks in the cluster.
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --all, -a                    - List all mesos tasks
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default      - id hostname name
+      id           - Framework ID
+      h,hostname   - Hostname on which the framework is running
+      p,pid        - Mesos PID
+      n,name       - Framework name
+      offered-disk - Amount of disk offered to the framework
+      offered-mem  - " mem
+      offered-gpus - " gpus
+      offered-cpus - " cpus
+      used-disk    - Total disk used by framework tasks
+      used-mem     - " mem
+      used-gpus    - " gpus
+      used-cpus    - " cpus
+      staging      - Count of tasks in state TASK_STAGING
+      starting     - " TASK_STARTING
+      running      - " TASK_RUNNING
+      killing      - " TASK_KILLING
+      finished     - " TASK_FINISHED
+      killed       - " TASK_KILLED
+      failed       - " TASK_FAILED
+      lost         - " TASK_LOST
+      error        - " TASK_ERROR
+      active       - Is the framework active?
+      ui           - Registered Web UI URL
+      capabilities - Registered capabilities
+
+EOF
+}
 
 ps-help() {
   cat <<EOF
@@ -320,6 +373,201 @@ sandbox() {
   done
 }
 
+frameworks() {
+  declare -a OTHERARGS
+  declare -a COLUMNS
+  declare -a HEADERS
+
+  declare -a SELECTS
+
+  COLUMN_LIST="default"
+  NO_HEADER=false
+  NO_ALIGN=false
+  ALL=false
+  SORT_COLS=
+
+  ALIGN_CMD=$'| column -t -s "\t"'
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -a|--all)
+        ALL=true
+        ;;
+      -s|--sort)
+        SORT_COLS=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        frameworks-help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        frameworks-help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "$@"; do
+      case "$col" in
+        default)
+          interprete-cols id hostname name
+          ;;
+        id)
+          HEADERS+=(id)
+          COLUMNS+=(.id)
+          ;;
+        h|hostname)
+          HEADERS+=(hostname)
+          COLUMNS+=(.hostname)
+          ;;
+        p|pid)
+          HEADERS+=(pid)
+          COLUMNS+=(.pid)
+          ;;
+        n|name)
+          HEADERS+=(name)
+          COLUMNS+=(.name)
+          ;;
+        offered-disk)
+          HEADERS+=(offered-disk)
+          COLUMNS+=(.offered_resources.disk)
+          ;;
+        offered-mem)
+          HEADERS+=(offered-mem)
+          COLUMNS+=(.offered_resources.mem)
+          ;;
+        offered-gpus)
+          HEADERS+=(offered-gpus)
+          COLUMNS+=(.offered_resources.gpus)
+          ;;
+        offered-cpus)
+          HEADERS+=(offered-cpus)
+          COLUMNS+=(.offered_resources.cpus)
+          ;;
+        used-disk)
+          HEADERS+=(used-disk)
+          COLUMNS+=(.used_resources.disk)
+          ;;
+        used-mem)
+          HEADERS+=(used-mem)
+          COLUMNS+=(.used_resources.mem)
+          ;;
+        used-gpus)
+          HEADERS+=(used-gpus)
+          COLUMNS+=(.used_resources.gpus)
+          ;;
+        used-cpus)
+          HEADERS+=(used-cpus)
+          COLUMNS+=(.used_resources.cpus)
+          ;;
+        staging)
+          HEADERS+=(staging)
+          COLUMNS+=(.TASK_STAGING)
+          ;;
+        starting)
+          HEADERS+=(starting)
+          COLUMNS+=(.TASK_STARTING)
+          ;;
+        running)
+          HEADERS+=(running)
+          COLUMNS+=(.TASK_RUNNING)
+          ;;
+        killing)
+          HEADERS+=(killing)
+          COLUMNS+=(.TASK_KILLING)
+          ;;
+        finished)
+          HEADERS+=(finished)
+          COLUMNS+=(.TASK_FINISHED)
+          ;;
+        killed)
+          HEADERS+=(killed)
+          COLUMNS+=(.TASK_KILLED)
+          ;;
+        failed)
+          HEADERS+=(failed)
+          COLUMNS+=(.TASK_FAILED)
+          ;;
+        lost)
+          HEADERS+=(lost)
+          COLUMNS+=(.TASK_LOST)
+          ;;
+        error)
+          HEADERS+=(error)
+          COLUMNS+=(.TASK_ERROR)
+          ;;
+        active)
+          HEADERS+=(active)
+          COLUMNS+=(.active)
+          ;;
+        ui)
+          HEADERS+=(ui)
+          COLUMNS+=(.webui_url)
+          ;;
+        capabilities)
+          HEADERS+=(capabilities)
+          COLUMNS+=('(.capabilities | join(","))')
+          ;;
+          
+        *)
+          echo "Unknown column: $col" 1>&2
+          frameworks-help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  # hack: hijack interprete-cols to get the column expression
+  interprete-cols $SORT_COLS
+  SORT_EXPS=("${COLUMNS[@]}")
+  COLUMNS=()
+  HEADERS=()
+  interprete-cols $COLUMN_LIST
+  if ! $ALL; then
+    SELECTS+=('select(.active == true)')
+  fi
+
+  output-it() {
+    if ! $NO_HEADER; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+
+    SELECT_EXP=""
+    for expr in "${SELECTS[@]}"; do
+      SELECT_EXP+="| ${expr}"
+    done
+
+    if [ "${#SORT_EXPS[@]}" -ne 0 ]; then
+      SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
+    fi
+
+    jq -r '.frameworks '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' <(mesos-curl "/state-summary")
+  }
+
+  if $NO_ALIGN; then
+    output-it
+  else
+    output-it | column -t -s $'\t'
+  fi
+}
+
 ps() {
   declare -a OTHERARGS
   declare -a COLUMNS
@@ -513,6 +761,7 @@ fi
 case "$cmd" in
   curl) mesos-curl "$@" ;;
   ps) ps "$@" ;;
+  frameworks) frameworks "$@" ;;
   executor-url) executor-url "$@" ;;
   inspect) inspect "$@" ;;
   sandbox) sandbox "$@" ;;
