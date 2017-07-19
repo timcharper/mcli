@@ -46,7 +46,7 @@ _comp_mesos_ps() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "default id name cpus mem gpus disk ports state type image host ip ips url started finished" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default id name cpus mem gpus disk ports state type image host ip ips url started finished agent_id" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"
@@ -113,3 +113,4 @@ _comp_mesos() {
 }
 complete  -o nospace -o bashdefault -F _comp_mesos mesos
 complete  -o nospace -o bashdefault -F _comp_mesos mesos-cli
+complete  -o nospace -o bashdefault -F _comp_mesos mcli

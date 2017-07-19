@@ -1,6 +1,15 @@
 #!/bin/bash
 
 : ${MESOS_PAGINATE_SIZE:=1000}
+: ${MESOS_CURL_CMD:=curl}
+: ${MESOS_CLI_CFG:=/etc/default/mesos-cli}
+: ${MESOS_HTTP_PROTO:=http}
+: ${MESOS_MASTER_URL:=${MESOS_HTTP_PROTO}://leader.mesos:5050}
+: ${MESOS_GUI_URL:=http://leader.mesos}
+# for compat with pre mesos 1.0.0, set to slaves
+: ${MESOS_AGENT_NAME:=agents}
+
+
 set -e
 
 help() {
@@ -131,11 +140,6 @@ See curl --help for description of other options
 EOF
 }
 
-mesos-env() {
-  cat /etc/mesos/.credentials  | jq '.credentials[] | select(.principal == "slave") | "MESOS_PRINCIPAL=" + .principal + "; MESOS_SECRET=" + .secret' -r
-  cat /etc/mesos-slave/hostname | sed -E 's|^[^.]+\.([^.]+)\..*|MESOS_DATACENTER=\1|'
-}
-
 mesos-curl() {
   if [ "$1" = "--help" ] || [ -z "$1" ]; then
     mesos-curl-help
@@ -144,7 +148,7 @@ mesos-curl() {
   URI=$1
   shift
 
-  echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | curl -K - -s -H "Content-Type: application/json" ${MESOS_MASTER_URL}${URI} "${@}"
+  echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | $MESOS_CURL_CMD -K - -s -H "Content-Type: application/json" ${MESOS_MASTER_URL}${URI} "${@}"
   return 1
 }
 
@@ -261,7 +265,7 @@ executor-url() {
     exit 1
   fi
 
-  inspect "${OTHERARGS[0]}" | jq '"'$MESOS_URL'/#/agents/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + (if .executor_id == "" then .id else .executor_id end)' -r
+  inspect "${OTHERARGS[0]}" | jq '"'$MESOS_GUI_URL'/#/'$MESOS_AGENT_NAME'/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + (if .executor_id == "" then .id else .executor_id end)' -r
 }
 
 
@@ -304,11 +308,11 @@ sandbox() {
 
 
   ID="${OTHERARGS[0]}"
-  inspect "$ID" --no-color | jq '"https://" + .host + ":5051/state"' -r | while read url; do
-    curl -s "$url" | jq '[.frameworks, .completed_frameworks] | add | map([.executors, .completed_executors]) | flatten | map( { "directory": .directory, "tasks": ([.tasks, .queued_tasks, .completed_tasks] | add | map(select(.id == "'"${ID}"'"))) })[] | select(.tasks | length > 0) | .directory' -r | while read sandbox_path; do
+  inspect "$ID" --no-color | jq '"'${MESOS_HTTP_PROTO}'://" + .host + ":5051/state"' -r | while read url; do
+    $MESOS_CURL_CMD -s "$url" | jq '[.frameworks, .completed_frameworks] | add | map([.executors, .completed_executors]) | flatten | map( { "directory": .directory, "tasks": ([.tasks, .queued_tasks, .completed_tasks] | add | map(select(.id == "'"${ID}"'"))) })[] | select(.tasks | length > 0) | .directory' -r | while read sandbox_path; do
       if $SHOW_URL; then
         eval "$(mesos-vars "$sandbox_path")"
-        echo $MESOS_URL/#/agents/${AGENT_ID}/browse?path=$(echo $FULL_PATH | sed "s|/|%2f|g")
+        echo $MESOS_GUI_URL/#/$MESOS_AGENT_NAME/${AGENT_ID}/browse?path=$(echo $FULL_PATH | sed "s|/|%2f|g")
       else
         echo $sandbox_path
       fi
@@ -426,6 +430,10 @@ ps() {
           HEADERS+=(host)
           COLUMNS+=('$slaves[.slave_id]')
           ;;
+        agent_id)
+          HEADERS+=(agent_id)
+          COLUMNS+=(.slave_id)
+          ;;
         ip)
           HEADERS+=(ip)
           COLUMNS+=('(.statuses | map(.container_status.network_infos[] | .ip_addresses[] | .ip_address)[0])')
@@ -436,7 +444,7 @@ ps() {
           ;;
         url)
           HEADERS+=(url)
-          COLUMNS+=('"'$MESOS_URL'/#/agents/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + ((if .executor_id == "" then .id else .executor_id end) | @uri)')
+          COLUMNS+=('"'$MESOS_GUI_URL'/#/'$MESOS_AGENT_NAME'/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + ((if .executor_id == "" then .id else .executor_id end) | @uri)')
           ;;
         *)
           echo "Unknown column: $col" 1>&2
@@ -498,9 +506,9 @@ if [ -z "$cmd" ]; then
   exit 1
 fi
 
-eval $(mesos-env)
-: ${MESOS_MASTER_URL:=https://leader.${MESOS_DATACENTER}.mesos:5050}
-: ${MESOS_GUI_URL:=http://leader.mesos:5050}
+if [ -f "${MESOS_CLI_CFG}" ]; then
+  source "${MESOS_CLI_CFG}"
+fi
 
 case "$cmd" in
   curl) mesos-curl "$@" ;;
