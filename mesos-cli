@@ -9,6 +9,20 @@
 # for compat with pre mesos 1.0.0, set to slaves
 : ${MESOS_AGENT_NAME:=agents}
 
+progname=$(basename "$0")
+
+if [ "$progname" != "mesos-cli" ]; then
+  cmd=${progname#mesos-}
+  INVOCATION="$0"
+else
+  cmd=$1
+  shift || (help; exit 1)
+  INVOCATION="$0 $cmd"
+fi
+
+if [ -f "${MESOS_CLI_CFG}" ]; then
+  source "${MESOS_CLI_CFG}"
+fi
 
 set -e
 
@@ -21,8 +35,9 @@ Commands:
   - curl         : curl helper for mesos; first arg URI, rest forwarded to curl.
   - executor-url : show the executor-url for a given task
   - inspect      : inspect a mesos task
-  - ps           : view mesos processes
-  - frameworks   : view information about frameworks
+  - ps           : list mesos processes
+  - frameworks   : list frameworks
+  - agents       : list agents
   - sandbox      : show the sandbox for a given task
 
 For help on commands, $0 <cmd> --help
@@ -59,6 +74,57 @@ usage: ${INVOCATION} <id>
 EOF
 }
 
+agents-help() {
+  cat <<EOF
+List agents in the cluster.
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --all, -a                    - List all mesos tasks
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default       - id hostname roles
+      id            - Agent id
+      hostname
+      port          - Port on which agent is listening (HTTP)
+      version
+      active
+      pid
+      roles         - Agent resource roles
+      attributes    - Configured agent attributes
+      cpus          - Total CPUs managed by agent
+      mem           - Total mem managed by agent (mb)
+      disk          - Total disk managed by agent (mb)
+      gpus          - Total GPUs managed by agent
+      ports         - Host port ranges managed by agent
+      used-cpus     - Total CPUs assigned to running tasks
+      used-mem      - Total memory assigned to running tasks
+      used-disk     - Total disk assigned to running tasks
+      used-gpus     - Total GPUs assigned to running tasks
+      reserved-cpus - Total reserved CPUs (used and unused)
+      reserved-mem  - Total reserved mem (used and unused)
+      reserved-disk - Total reserved disk (used and unused)
+      reserved-gpus - Total reserved GPUs (used and unused)
+      registered    - Time and which the agent was registered
+
+EOF
+}
+
 frameworks-help() {
   cat <<EOF
 List frameworks in the cluster.
@@ -84,7 +150,7 @@ usage: ${INVOCATION} [options...]
 column list:
 
       default      - id hostname name
-      id           - Framework ID
+      id           - Framework id
       h,hostname   - Hostname on which the framework is running
       p,pid        - Mesos PID
       n,name       - Framework name
@@ -139,23 +205,26 @@ usage: ${INVOCATION} [options...]
 
 column list:
 
-      default    - Group: id,host,state,started
-      id         - Task id
-      n,name     - Name of container
-      cpus       - # of cpus assigned to task
-      mem        - # of ram (MB) assigned to task
-      gpus       - # of gpus assigned to task
-      disk       - # of disk (MB) assigned to task
-      ports      - ports assigned to process
-      s,state    - Status off task
-      t,type     - Type of container (docker or not)
-      image      - If docker, what image is used
-      h,host     - Host on which container is running
-      ip         - IP address of task
-      ips        - IP addresses of task
-      url        - The executor URL for the task
-      started    - Start time
-      finished   - Finish time
+      default      - Group: id,host,state,started
+      id           - Task id
+      n,name       - Name of container
+      cpus         - # of cpus assigned to task
+      mem          - # of ram (MB) assigned to task
+      gpus         - # of gpus assigned to task
+      disk         - # of disk (MB) assigned to task
+      ports        - ports assigned to process
+      s,state      - Status off task
+      t,type       - Type of container (docker or not)
+      image        - If docker, what image is used
+      h,host       - Host on which container is running
+      ip           - IP address of task
+      ips          - IP addresses of task
+      url          - The executor URL for the task
+      started      - Start time
+      finished     - Finish time
+      agent_id     - Agent (slave) id
+      framework_id - Id of framework that launched this task
+      executor_id  - Executor id
 EOF
 }
 
@@ -371,6 +440,137 @@ sandbox() {
       fi
     done
   done
+}
+
+agents() {
+  declare -a OTHERARGS
+  declare -a COLUMNS
+  declare -a HEADERS
+
+  declare -a SELECTS
+
+  COLUMN_LIST="default"
+  NO_HEADER=false
+  NO_ALIGN=false
+  ALL=false
+  SORT_COLS=
+
+  ALIGN_CMD=$'| column -t -s "\t"'
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -a|--all)
+        ALL=true
+        ;;
+      -s|--sort)
+        SORT_COLS=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        agents-help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        agents-help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "$@"; do
+      case "$col" in
+        default)
+          interprete-cols id hostname roles
+          ;;
+        port|id|hostname|version|active|pid)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
+          ;;
+        r|roles)
+          HEADERS+=(reserved-resource-roles)
+          COLUMNS+=('(.reserved_resources_full | keys | join(","))')
+          ;;
+        attributes)
+          HEADERS+=($col)
+          COLUMNS+=('(.attributes | to_entries | map(.key + "=" + .value) | join(","))')
+          ;;
+        disk|mem|gpus|cpus)
+          HEADERS+=($col)
+          COLUMNS+=(.resources.$col)
+          ;;
+        ports)
+          HEADERS+=($col)
+          COLUMNS+=('(.resources.ports | gsub("[\\]\\[ ]"; ""))')
+          ;;
+        registered)
+          HEADERS+=($col)
+          COLUMNS+=('(.registered_time | todate)')
+          ;;
+        used-disk|used-mem|used-gpus|used-cpus)
+          HEADERS+=($col)
+          COLUMNS+=(.used_resources.${col:5})
+          ;;
+        reserved-disk|reserved-mem|reserved-gpus|reserved-cpus)
+          HEADERS+=($col)
+          COLUMNS+=('(.reserved_resources | to_entries | map(.key + ":" + (.value.'${col:9}' | tostring)) | join (","))')
+          ;;
+
+        *)
+          echo "Unknown column: $col" 1>&2
+          agents-help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  # hack: hijack interprete-cols to get the column expression
+  interprete-cols $SORT_COLS
+  SORT_EXPS=("${COLUMNS[@]}")
+  COLUMNS=()
+  HEADERS=()
+  interprete-cols $COLUMN_LIST
+  if ! $ALL; then
+    SELECTS+=('select(.active == true)')
+  fi
+
+  output-it() {
+    if ! $NO_HEADER; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+
+    SELECT_EXP=""
+    for expr in "${SELECTS[@]}"; do
+      SELECT_EXP+="| ${expr}"
+    done
+
+    if [ "${#SORT_EXPS[@]}" -ne 0 ]; then
+      SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
+    fi
+
+    jq -r '.slaves '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' <(mesos-curl "/slaves")
+  }
+
+  if $NO_ALIGN; then
+    output-it
+  else
+    output-it | column -t -s $'\t'
+  fi
 }
 
 frameworks() {
@@ -682,6 +882,14 @@ ps() {
           HEADERS+=(agent_id)
           COLUMNS+=(.slave_id)
           ;;
+        executor_id)
+          HEADERS+=(executor_id)
+          COLUMNS+=(.executor_id)
+          ;;
+        framework_id)
+          HEADERS+=(framework_id)
+          COLUMNS+=(.framework_id)
+          ;;
         ip)
           HEADERS+=(ip)
           COLUMNS+=('(.statuses | map(.container_status.network_infos[] | .ip_addresses[] | .ip_address)[0])')
@@ -738,30 +946,16 @@ ps() {
   fi
 }
 
-
-progname=$(basename "$0")
-if [ "$progname" != "mesos-cli" ]; then
-  cmd=${progname#mesos-}
-  INVOCATION="$0"
-else
-  cmd=$1
-  shift || (help; exit 1)
-  INVOCATION="$0 $cmd"
-fi
-
 if [ -z "$cmd" ]; then
   help
   exit 1
-fi
-
-if [ -f "${MESOS_CLI_CFG}" ]; then
-  source "${MESOS_CLI_CFG}"
 fi
 
 case "$cmd" in
   curl) mesos-curl "$@" ;;
   ps) ps "$@" ;;
   frameworks) frameworks "$@" ;;
+  agents) agents "$@" ;;
   executor-url) executor-url "$@" ;;
   inspect) inspect "$@" ;;
   sandbox) sandbox "$@" ;;

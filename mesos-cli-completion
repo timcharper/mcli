@@ -46,7 +46,7 @@ _comp_mesos_ps() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "default id name cpus mem gpus disk ports state type image host ip ips url started finished agent_id" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default id name cpus mem gpus disk ports state type image host ip ips url started finished framework_id executor_id agent_id" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"
@@ -58,6 +58,43 @@ _comp_mesos_ps() {
   esac
 }
 
+_comp_mesos_agents() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--all -a --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
+      return 0
+      ;;
+  esac
+
+  case "${prev}" in
+    -c|--columns|-s|--sort)
+      local cols curcol others n
+      cols=($(echo "$cur" | tr ',' ' '))
+      if [ ! ${#cols[@]} = 0 ]; then
+        if [ "${cur:${#cur}-1}" = "," ]; then
+          cols+=("")
+        fi
+
+        curcol=${cols[${#cols[@]}-1]}
+        others=$(_comp_mesos_join-str , "${cols[@]:0:${#cols[@]}-1}")
+      else
+        others=""
+        curcol=""
+      fi
+
+      COMPREPLY+=( $(compgen -W "default id hostname port version active pid roles attributes cpus mem disk gpus ports used-cpus used-mem used-disk used-gpus reserved-cpus reserved-mem reserved-disk reserved-gpus registered" -- "${curcol}"))
+      if [ ! -z "$others" ]; then
+        for ((n=0; n<${#COMPREPLY[@]}; n++)); do
+          COMPREPLY[$n]="${others},${COMPREPLY[n]}"
+        done
+      fi
+
+      return 0
+      ;;
+  esac
+
+}
+      
 _comp_mesos_frameworks() {
   case "${cur}" in
     -*)
@@ -120,7 +157,7 @@ _comp_mesos() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl executor-url inspect frameworks ps sandbox" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl executor-url inspect agents frameworks ps sandbox" -- ${cur}) )
 
     return 0
   fi
@@ -145,6 +182,9 @@ _comp_mesos() {
       ;;
     sandbox)
       _comp_mesos_sandbox
+      ;;
+    agents)
+      _comp_mesos_agents
       ;;
     *)
       return 0
