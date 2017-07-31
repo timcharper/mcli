@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 : ${MESOS_PAGINATE_SIZE:=1000}
 : ${MESOS_CURL_CMD:=curl}
@@ -149,31 +149,33 @@ usage: ${INVOCATION} [options...]
 
 column list:
 
-      default      - id hostname name
-      id           - Framework id
-      h,hostname   - Hostname on which the framework is running
-      p,pid        - Mesos PID
-      n,name       - Framework name
-      offered-disk - Amount of disk offered to the framework
-      offered-mem  - " mem
-      offered-gpus - " gpus
-      offered-cpus - " cpus
-      used-disk    - Total disk used by framework tasks
-      used-mem     - " mem
-      used-gpus    - " gpus
-      used-cpus    - " cpus
-      staging      - Count of tasks in state TASK_STAGING
-      starting     - " TASK_STARTING
-      running      - " TASK_RUNNING
-      killing      - " TASK_KILLING
-      finished     - " TASK_FINISHED
-      killed       - " TASK_KILLED
-      failed       - " TASK_FAILED
-      lost         - " TASK_LOST
-      error        - " TASK_ERROR
-      active       - Is the framework active?
-      ui           - Registered Web UI URL
-      capabilities - Registered capabilities
+      default            - id hostname name
+      id                 - Framework id
+      h,hostname         - Hostname on which the framework is running
+      p,pid              - Mesos PID
+      n,name             - Framework name
+      offered-disk       - Amount of disk offered to the framework
+      offered-mem        - " mem
+      offered-gpus       - " gpus
+      offered-cpus       - " cpus
+      used-disk          - Total disk used by framework tasks
+      used-mem           - " mem
+      used-gpus          - " gpus
+      used-cpus          - " cpus
+      tasks-statuses     - All task status count columns
+      tasks-staging      - Count of tasks in state TASK_STAGING
+      tasks-starting     - " TASK_STARTING
+      tasks-running      - " TASK_RUNNING
+      tasks-killing      - " TASK_KILLING
+      tasks-finished     - " TASK_FINISHED
+      tasks-killed       - " TASK_KILLED
+      tasks-failed       - " TASK_FAILED
+      tasks-lost         - " TASK_LOST
+      tasks-error        - " TASK_ERROR
+      tasks-unreachable  - " TASK_UNREACHABLE
+      active             - Is the framework active?
+      ui                 - Registered Web UI URL
+      capabilities       - Registered capabilities
 
 EOF
 }
@@ -627,6 +629,9 @@ frameworks() {
         default)
           interprete-cols id hostname name
           ;;
+        tasks-statuses)
+          interprete-cols tasks-staging tasks-starting tasks-running tasks-killing tasks-finished tasks-killed tasks-failed tasks-lost tasks-error tasks-unreachable
+          ;;
         id)
           HEADERS+=(id)
           COLUMNS+=(.id)
@@ -675,41 +680,10 @@ frameworks() {
           HEADERS+=(used-cpus)
           COLUMNS+=(.used_resources.cpus)
           ;;
-        staging)
-          HEADERS+=(staging)
-          COLUMNS+=(.TASK_STAGING)
-          ;;
-        starting)
-          HEADERS+=(starting)
-          COLUMNS+=(.TASK_STARTING)
-          ;;
-        running)
-          HEADERS+=(running)
-          COLUMNS+=(.TASK_RUNNING)
-          ;;
-        killing)
-          HEADERS+=(killing)
-          COLUMNS+=(.TASK_KILLING)
-          ;;
-        finished)
-          HEADERS+=(finished)
-          COLUMNS+=(.TASK_FINISHED)
-          ;;
-        killed)
-          HEADERS+=(killed)
-          COLUMNS+=(.TASK_KILLED)
-          ;;
-        failed)
-          HEADERS+=(failed)
-          COLUMNS+=(.TASK_FAILED)
-          ;;
-        lost)
-          HEADERS+=(lost)
-          COLUMNS+=(.TASK_LOST)
-          ;;
-        error)
-          HEADERS+=(error)
-          COLUMNS+=(.TASK_ERROR)
+        tasks-staging|tasks-starting|tasks-running|tasks-killing|tasks-finished|tasks-killed|tasks-failed|tasks-lost|tasks-error|tasks-unreachable)
+          status=${col:6}
+          HEADERS+=("# ${status}")
+          COLUMNS+=(".TASK_${status^^}")
           ;;
         active)
           HEADERS+=(active)
