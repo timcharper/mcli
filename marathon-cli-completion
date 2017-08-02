@@ -1,0 +1,91 @@
+#!/bin/bash
+
+_comp_marathon_join-str() {
+  delimiter="$1"
+  shift
+  OUTPUT=""
+  for ((n=1; n<=$#; n++)); do
+    if [ "$n" -ne 1 ]; then
+      OUTPUT+="${delimiter}"
+    fi
+    OUTPUT+="${!n}"
+  done
+  echo -n "$OUTPUT"
+}
+
+_comp_marathon_curl() {
+  case "${prev}" in
+    curl)
+      COMPREPLY+=( $(compgen -W "/files/browse /files/browse.json /files/debug /files/debug.json /files/download /files/download.json /files/read /files/read.json /logging/toggle /api/v1 /api/v1/scheduler /create-volumes /destroy-volumes /flags /frameworks /health /machine/down /machine/up /maintenance/schedule /maintenance/status /quota /redirect /reserve /roles /roles.json /slaves /state /state-summary /state.json /tasks /tasks.json /teardown /unreserve /weights /metrics/snapshot /profiler/start /profiler/stop /registrar(id)/registry /system/stats.json /version" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon_apps() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--all -a --limit -l --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
+      return 0
+      ;;
+  esac
+
+  case "${prev}" in
+    -c|--columns|-s|--sort)
+      local cols curcol others n
+      cols=($(echo "$cur" | tr ',' ' '))
+      if [ ! ${#cols[@]} = 0 ]; then
+        if [ "${cur:${#cur}-1}" = "," ]; then
+          cols+=("")
+        fi
+
+        curcol=${cols[${#cols[@]}-1]}
+        others=$(_comp_marathon_join-str , "${cols[@]:0:${#cols[@]}-1}")
+      else
+        others=""
+        curcol=""
+      fi
+
+
+
+
+
+      COMPREPLY+=( $(compgen -W "id cmd cpus mem disk gpus executor backoffSeconds backoffFactor maxLaunchDelaySeconds version residency killSelection requirePorts tasksStaged tasksHealthy tasksUnhealthy ports container-type docker-network-type volume-count docker-image lastScalingAt lastConfigChangeAt deployment-count health-checks-count instances" -- "${curcol}"))
+      if [ ! -z "$others" ]; then
+        for ((n=0; n<${#COMPREPLY[@]}; n++)); do
+          COMPREPLY[$n]="${others},${COMPREPLY[n]}"
+        done
+      fi
+
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon() {
+  local cur prev words cword
+  _init_completion -n : || return
+  COMPREPLY=()
+
+  if [ ${COMP_CWORD} = 1 ]; then
+    COMPREPLY=( $(compgen -W "curl apps" -- ${cur}) )
+
+    return 0
+  fi
+
+  cmd=${COMP_WORDS[1]}
+
+  case "$cmd" in
+    curl)
+      _comp_marathon_curl
+      ;;
+    apps)
+      _comp_marathon_apps
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+}
+complete  -o nospace -o bashdefault -F _comp_marathon marathon-cli

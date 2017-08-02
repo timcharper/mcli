@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+
+: ${MARATHON_PAGINATE_SIZE:=1000}
+: ${MARATHON_CURL_CMD:=curl}
+: ${MARATHON_CLI_CFG:=/etc/default/mesos-cli}
+: ${MARATHON_HTTP_PROTO:=http}
+: ${MARATHON_MASTER_URL:=${MARATHON_HTTP_PROTO}://marathon.mesos:8080}
+: ${MARATHON_GUI_URL:=http://leader.mesos}
+# for compat with pre mesos 1.0.0, set to slaves
+: ${MARATHON_AGENT_NAME:=agents}
+
+progname=$(basename "$0")
+
+if [ "$progname" != "marathon-cli" ]; then
+  cmd=${progname#marathon-}
+  INVOCATION="$0"
+else
+  cmd=$1
+  shift || (help; exit 1)
+  INVOCATION="$0 $cmd"
+fi
+
+if [ -f "${MARATHON_CLI_CFG}" ]; then
+  source "${MARATHON_CLI_CFG}"
+fi
+
+set -e
+
+help() {
+  cat <<EOF
+Usage: ${INVOCATION} <cmd> [<options...>]
+
+Commands:
+
+  - apps         : list marathon apps
+  - curl         : curl Marathon
+
+For help on commands, $0 <cmd> --help
+
+EOF
+}
+
+apps-help() {
+  cat <<EOF
+List mesos tasks in the cluster.
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default      - Group: id container-type version
+
+      id                   - App id
+      cmd                  - command to run
+      cpus                 - # of cpus assigned to app
+      mem                  - Amount of RAM allocated for app
+      disk                 - Amount of scratch disk allocated for app
+      gpus                 - # of GPUs assigned to app
+      executor             - executor used
+      instances            - target # of instances
+      backoffSeconds       - Deployment backoffSeconds
+      backoffFactor        - Deployment backoffFactor
+      maxLaunchDelaySeconds
+      version              - Current version of app definition
+      residency            - Does the app have persistent state
+      killSelection        - When scaling down, kill what?
+      requirePorts         - Host networking concept; read the docs
+      tasksStaged          - # of tasks currently staged
+      tasksHealthy         - " healthy
+      tasksUnhealthy       - " staged
+      ports                - Host networking concept; read the docs
+      container-type       - DOCKER or MESOS container?
+      docker-network-type
+      volume-count         - # of volumes assigned
+      docker-image         - Docker image used for provisioning container
+      lastScalingAt        - Last time app scaled up or down (this does not affect the version)
+      lastConfigChangeAt   - Last time app config was changed
+      deployment-count     - # of pending deployments associated with this app
+      health-checks-count  - # of health checks assigned to app
+
+EOF
+}
+
+marathon-curl-help() {
+  cat <<EOF
+Curl helper for Marathon Provides host, credentials; sets Content-Type to
+application/json. Gregarious fellow, hit of the party, source of jealousy.
+
+usage: ${INVOCATION} <uri> [curl args...]
+
+Options:
+
+   --help          - This help (when passed as first arg)
+
+See curl --help for description of other options
+
+EOF
+}
+
+marathon-curl() {
+  if [ "$1" = "--help" ] || [ -z "$1" ]; then
+    marathon-curl-help
+  fi
+
+  URI=$1
+  shift
+
+  echo 'user = "'$MARATHON_PRINCIPAL':'$MARATHON_SECRET'"' | $MARATHON_CURL_CMD -K - -s -H "Content-Type: application/json" ${MARATHON_MASTER_URL}${URI} "${@}"
+  return 1
+}
+
+join-str() {
+  local delimiter="$1"
+  shift
+  local OUTPUT=""
+  for ((n=1; n<=$#; n++)); do
+    if [ "$n" -ne 1 ]; then
+      OUTPUT+="${delimiter}"
+    fi
+    OUTPUT+="${!n}"
+  done
+  echo -n "$OUTPUT"
+}
+
+apps() {
+  declare -a OTHERARGS
+  declare -a COLUMNS
+  declare -a HEADERS
+  declare -a SELECTS
+
+  COLUMN_LIST="default"
+  NO_HEADER=false
+  NO_ALIGN=false
+  SORT_COLS=
+
+  ALIGN_CMD=$'| column -t -s "\t"'
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -s|--sort)
+        SORT_COLS=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        apps-help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        ps-help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "$@"; do
+      case "$col" in
+        default)
+          interprete-cols id container-type version
+          ;;
+        id|cmd|cpus|mem|disk|gpus|executor|backoffSeconds|backoffFactor|maxLaunchDelaySeconds|version|residency|killSelection|requirePorts|tasksStaged|tasksHealthy|tasksUnhealthy|instances)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
+          ;;
+        ports)
+          HEADERS+=(ports)
+          COLUMNS+=('((.ports[0:3] | map(tostring) | join(",")) + (if ((.ports | length) <= 3) then "" else ",..." end))')
+          ;;
+        container-type)
+          HEADERS+=(container-type)
+          COLUMNS+=(.container.type)
+          ;;
+        docker-network-type)
+          HEADERS+=(docker-network-type)
+          COLUMNS+=(.container.docker.network)
+          ;;
+        volume-count)
+          HEADERS+=('# volumes')
+          COLUMNS+=('(.container.volumes | length)')
+          ;;
+        docker-image)
+          HEADERS+=(docker-image)
+          COLUMNS+=(.container.docker.image)
+          ;;
+        lastScalingAt)
+          HEADERS+=($col)
+          COLUMNS+=(.versionInfo.lastScalingAt)
+          ;;
+        lastConfigChangeAt)
+          HEADERS+=($col)
+          COLUMNS+=(.versionInfo.lastConfigChangeAt)
+          ;;
+        deployment-count)
+          HEADERS+=('# deployments')
+          COLUMNS+=('(.deployments | length)')
+          ;;
+        health-checks-count)
+          HEADERS+=('# healthChecks')
+          COLUMNS+=('(.healthChecks | length)')
+          ;;
+        *)
+          echo "Unknown column: $col" 1>&2
+          apps-help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  # hack: hijack interprete-cols to get the column expression
+  interprete-cols $SORT_COLS
+  SORT_EXPS=("${COLUMNS[@]}")
+  COLUMNS=()
+  HEADERS=()
+  interprete-cols $COLUMN_LIST
+
+  output-it() {
+    if ! $NO_HEADER; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+
+    SELECT_EXP=""
+    for expr in "${SELECTS[@]}"; do
+      SELECT_EXP+="| ${expr}"
+    done
+
+    if [ "${#SORT_EXPS[@]}" -ne 0 ]; then
+      SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
+    fi
+
+    marathon-curl "/v2/apps" | jq '.apps '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
+    # jq -s '.[0] as $slaves | .[1] | .tasks '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' <(marathon-curl "/v2/apps")
+  }
+
+  if $NO_ALIGN; then
+    output-it
+  else
+    output-it | column -t -s $'\t'
+  fi
+}
+
+if [ -z "$cmd" ]; then
+  help
+  exit 1
+fi
+
+case "$cmd" in
+  apps) apps "$@" ;;
+  curl) marathon-curl "$@" ;;
+  *) echo "unrecognized command: $cmd"; help; exit 1 ;;
+esac

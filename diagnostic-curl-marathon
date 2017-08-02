@@ -1,0 +1,21 @@
+#!/bin/bash
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -K) shift ;;
+    -s) ;;
+    -H) shift ;;
+    *) URL=$1 ;;
+  esac
+  shift
+done
+
+URL_AUTHORITY=$(echo "$URL" | cut -f 3 -d /)
+URL_PATH=$(echo "$URL" | cut -f 4-9 -d /)
+
+URL_HOSTNAME=$(echo $URL_AUTHORITY | cut -f 1 -d :)
+URL_PORT=$(echo $URL_AUTHORITY | cut -f 2 -d :)
+
+PATH_FILENAME=$(echo "$URL_PATH" | cut -f 1 -d ? | sed 's|/|_|g')
+
+cat ${URL_HOSTNAME}_master/${URL_PORT}:${PATH_FILENAME}.json.gz | gunzip
