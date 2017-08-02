@@ -22,10 +22,46 @@ _comp_marathon_curl() {
   esac
 }
 
+_comp_marathon_tasks() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--all --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
+      return 0
+      ;;
+  esac
+
+  case "${prev}" in
+    -c|--columns|-s|--sort)
+      local cols curcol others n
+      cols=($(echo "$cur" | tr ',' ' '))
+      if [ ! ${#cols[@]} = 0 ]; then
+        if [ "${cur:${#cur}-1}" = "," ]; then
+          cols+=("")
+        fi
+
+        curcol=${cols[${#cols[@]}-1]}
+        others=$(_comp_marathon_join-str , "${cols[@]:0:${#cols[@]}-1}")
+      else
+        others=""
+        curcol=""
+      fi
+
+      COMPREPLY+=( $(compgen -W "default id host appId stagedAt startedAt state version ports servicePorts ipAddresses agentId" -- "${curcol}"))
+      if [ ! -z "$others" ]; then
+        for ((n=0; n<${#COMPREPLY[@]}; n++)); do
+          COMPREPLY[$n]="${others},${COMPREPLY[n]}"
+        done
+      fi
+
+      return 0
+      ;;
+  esac
+}
+
 _comp_marathon_apps() {
   case "${cur}" in
     -*)
-      COMPREPLY+=( $(compgen -W "--all -a --limit -l --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "--all --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
       return 0
       ;;
   esac
@@ -74,6 +110,9 @@ _comp_marathon() {
   case "$cmd" in
     curl)
       _comp_marathon_curl
+      ;;
+    tasks)
+      _comp_marathon_tasks
       ;;
     apps)
       _comp_marathon_apps

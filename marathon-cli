@@ -72,7 +72,6 @@ column list:
       version
       ports
       servicePorts
-      healthCheckResults
       ipAddresses
       agentId
 EOF
