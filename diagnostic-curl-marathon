@@ -18,4 +18,9 @@ URL_PORT=$(echo $URL_AUTHORITY | cut -f 2 -d :)
 
 PATH_FILENAME=$(echo "$URL_PATH" | cut -f 1 -d ? | sed 's|/|_|g')
 
-cat ${URL_HOSTNAME}_master/${URL_PORT}:${PATH_FILENAME}.json.gz | gunzip
+PREFIX=${URL_HOSTNAME}_master/${URL_PORT}:${PATH_FILENAME}.json
+if [ -f "$PREFIX" ]; then
+  cat "$PREFIX"
+else
+  cat "${PREFIX}.gz" | gunzip
+fi

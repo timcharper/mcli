@@ -16,7 +16,7 @@ _comp_marathon_join-str() {
 _comp_marathon_curl() {
   case "${prev}" in
     curl)
-      COMPREPLY+=( $(compgen -W "/files/browse /files/browse.json /files/debug /files/debug.json /files/download /files/download.json /files/read /files/read.json /logging/toggle /api/v1 /api/v1/scheduler /create-volumes /destroy-volumes /flags /frameworks /health /machine/down /machine/up /maintenance/schedule /maintenance/status /quota /redirect /reserve /roles /roles.json /slaves /state /state-summary /state.json /tasks /tasks.json /teardown /unreserve /weights /metrics/snapshot /profiler/start /profiler/stop /registrar(id)/registry /system/stats.json /version" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "/metrics /v2/apps /v2/tasks /v2/deployments /v2/eventSubscriptions /v2/groups /v2/info /v2/leader /v2/queue /v2/tasks" -- "${cur}"))
       return 0
       ;;
   esac
@@ -45,10 +45,6 @@ _comp_marathon_apps() {
         others=""
         curcol=""
       fi
-
-
-
-
 
       COMPREPLY+=( $(compgen -W "id cmd cpus mem disk gpus executor backoffSeconds backoffFactor maxLaunchDelaySeconds version residency killSelection requirePorts tasksStaged tasksHealthy tasksUnhealthy ports container-type docker-network-type volume-count docker-image lastScalingAt lastConfigChangeAt deployment-count health-checks-count instances" -- "${curcol}"))
       if [ ! -z "$others" ]; then

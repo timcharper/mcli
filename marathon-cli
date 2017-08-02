@@ -40,9 +40,9 @@ For help on commands, $0 <cmd> --help
 EOF
 }
 
-apps-help() {
+tasks-help() {
   cat <<EOF
-List mesos tasks in the cluster.
+List marathon tasks
 
 usage: ${INVOCATION} [options...]
 
@@ -62,7 +62,47 @@ usage: ${INVOCATION} [options...]
 
 column list:
 
-      default      - Group: id container-type version
+      default      - Group: id state startedAt
+      id
+      host
+      appId
+      stagedAt
+      startedAt
+      state
+      version
+      ports
+      servicePorts
+      healthCheckResults
+      ipAddresses
+      agentId
+EOF
+}
+
+
+
+apps-help() {
+  cat <<EOF
+List marathon apps.
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default      - Group: id version instances
 
       id                   - App id
       cmd                  - command to run
@@ -136,6 +176,119 @@ join-str() {
   echo -n "$OUTPUT"
 }
 
+tasks() {
+  declare -a OTHERARGS
+  declare -a COLUMNS
+  declare -a HEADERS
+  declare -a SELECTS
+
+  COLUMN_LIST="default"
+  NO_HEADER=false
+  NO_ALIGN=false
+  SORT_COLS=id
+
+  ALIGN_CMD=$'| column -t -s "\t"'
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -s|--sort)
+        SORT_COLS=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        tasks-help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        ps-help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "$@"; do
+      case "$col" in
+        default)
+          interprete-cols id state startedAt
+          ;;
+
+        appId|host|id|stagedAt|startedAt|state|version)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
+          ;;
+        ports|servicePorts)
+          HEADERS+=($col)
+          COLUMNS+=('((.'$col'[0:3] | map(tostring) | join(",")) + (if ((.'$col' | length) <= 3) then "" else ",..." end))')
+          ;;
+
+        healthCheckResults)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
+          ;;
+
+        ipAddresses)
+          HEADERS+=($col)
+          COLUMNS+=('(.ipAddresses | map(.ipAddress) | join(","))')
+          ;;
+        agentId)
+          HEADERS+=($col)
+          COLUMNS+=(.slaveId)
+          ;;
+        *)
+          echo "Unknown column: $col" 1>&2
+          tasks-help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  # hack: hijack interprete-cols to get the column expression
+  interprete-cols $SORT_COLS
+  SORT_EXPS=("${COLUMNS[@]}")
+  COLUMNS=()
+  HEADERS=()
+  interprete-cols $COLUMN_LIST
+
+  output-it() {
+    if ! $NO_HEADER; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+
+    SELECT_EXP=""
+    for expr in "${SELECTS[@]}"; do
+      SELECT_EXP+="| ${expr}"
+    done
+
+    if [ "${#SORT_EXPS[@]}" -ne 0 ]; then
+      SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
+    fi
+
+    marathon-curl "/v2/tasks" | jq '.tasks '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
+  }
+
+  if $NO_ALIGN; then
+    output-it
+  else
+    output-it | column -t -s $'\t'
+  fi
+}
+
 apps() {
   declare -a OTHERARGS
   declare -a COLUMNS
@@ -145,7 +298,7 @@ apps() {
   COLUMN_LIST="default"
   NO_HEADER=false
   NO_ALIGN=false
-  SORT_COLS=
+  SORT_COLS=id
 
   ALIGN_CMD=$'| column -t -s "\t"'
   while ! [ -z "$1" ]; do
@@ -183,7 +336,7 @@ apps() {
     for col in "$@"; do
       case "$col" in
         default)
-          interprete-cols id container-type version
+          interprete-cols id version instances
           ;;
         id|cmd|cpus|mem|disk|gpus|executor|backoffSeconds|backoffFactor|maxLaunchDelaySeconds|version|residency|killSelection|requirePorts|tasksStaged|tasksHealthy|tasksUnhealthy|instances)
           HEADERS+=($col)
@@ -257,7 +410,6 @@ apps() {
     fi
 
     marathon-curl "/v2/apps" | jq '.apps '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
-    # jq -s '.[0] as $slaves | .[1] | .tasks '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' <(marathon-curl "/v2/apps")
   }
 
   if $NO_ALIGN; then
@@ -274,6 +426,7 @@ fi
 
 case "$cmd" in
   apps) apps "$@" ;;
+  tasks) tasks "$@" ;;
   curl) marathon-curl "$@" ;;
   *) echo "unrecognized command: $cmd"; help; exit 1 ;;
 esac

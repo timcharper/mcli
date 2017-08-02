@@ -10,8 +10,3 @@ export ENTERED=1
 
 echo "Loaded mcli shell / env"
 exec /usr/local/bin/bash --rcfile $MCLIPATH/osx/mclirc
-
-diagnostic_curl() {
-  export MESOS_CURL_CMD=$MCLIPATH/diagnostic-curl
-  export MARATHON_CURL_CMD=$MCLIPATH/diagnostic-curl
-}
