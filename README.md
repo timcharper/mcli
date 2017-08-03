@@ -14,20 +14,20 @@ By default, it assumes Marathon is running at `http://marathon.mesos:8080`, and 
 
 # Provided tools
 
-`mesos-cli` - A tool for reading and interpreting Mesos HTTP responses (aliased `mcli`)
-`marathon-cli` - A tool for reading and interpreting Marathon HTTP responses
-`dicker` - A Mesos/Marathon enriched docker task inspection tool with a silly name (aliased `dr`)
+- `mesos-cli` - A tool for reading and interpreting Mesos HTTP responses (aliased `mcli`)
+- `marathon-cli` - A tool for reading and interpreting Marathon HTTP responses
+- `dicker` - A Mesos/Marathon enriched docker task inspection tool with a silly name (aliased `dr`)
 
 # Configuration
 
 Several environment variables can be customized in order to specify credentials and URLs. To customize, use `export <VARNAME>=<VALUE>`; if you do not export the variable, then the mesos-cli tools will not see the value.
 
-`MARATHON_MASTER_URL` (default: http://marathon.mesos:8080)
-`MESOS_MASTER_URL` (default: http://leader.mesos:5050)
-`MARATHON_PRINCIPAL` - Basic auth username for marathon requests (default: none)
-`MARATHON_SECRET` - Basic auth password for marathon requests (default: none)
-`MESOS_PRINCIPAL` - Basic auth username for mesos requests (default: none)
-`MESOS_SECRET` - Basic auth password for mesos requests (default: none)
+- `MARATHON_MASTER_URL` (default: http://marathon.mesos:8080)
+- `MESOS_MASTER_URL` (default: http://leader.mesos:5050)
+- `MARATHON_PRINCIPAL` - Basic auth username for marathon requests (default: none)
+- `MARATHON_SECRET` - Basic auth password for marathon requests (default: none)
+- `MESOS_PRINCIPAL` - Basic auth username for mesos requests (default: none)
+- `MESOS_SECRET` - Basic auth password for mesos requests (default: none)
 
 # Auto completion
 
