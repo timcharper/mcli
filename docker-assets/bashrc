@@ -2,6 +2,7 @@ source /usr/share/bash-completion/bash_completion
 source /usr/local/share/bash-completion/mesos-cli-completion
 source /usr/local/share/bash-completion/marathon-cli-completion
 source /usr/local/share/bash-completion/dicker-completion
+source /usr/local/share/diagnostic-support
 
 alias dr=dicker
 alias mcli=mesos-cli
