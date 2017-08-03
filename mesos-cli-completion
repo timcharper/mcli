@@ -22,7 +22,7 @@ _comp_mesos_curl() {
   esac
 }
 
-_comp_mesos_ps() {
+_comp_mesos_tasks() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--all -a --limit -l --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
@@ -142,10 +142,14 @@ _comp_mesos_sandbox() {
   esac
 }
 
-_comp_mesos_inspect() {
+_comp_mesos_task() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--u --url" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(mesos-cli tasks -c id --no-header --no-align)" -- "${cur}"))
       return 0
       ;;
   esac
@@ -157,7 +161,7 @@ _comp_mesos() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl executor-url inspect agents frameworks ps sandbox" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl executor-url task agents frameworks tasks sandbox" -- ${cur}) )
 
     return 0
   fi
@@ -168,8 +172,8 @@ _comp_mesos() {
     executor-url)
       _comp_mesos_executor_url
       ;;
-    inspect)
-      _comp_mesos_inspect
+    inspect|task)
+      _comp_mesos_task
       ;;
     curl)
       _comp_mesos_curl
@@ -177,8 +181,8 @@ _comp_mesos() {
     frameworks)
       _comp_mesos_frameworks
       ;;
-    ps)
-      _comp_mesos_ps
+    ps|tasks)
+      _comp_mesos_tasks
       ;;
     sandbox)
       _comp_mesos_sandbox

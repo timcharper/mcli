@@ -1,4 +1,31 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+cat-maybe-gzip() {
+  if [ -f "$1" ]; then
+    cat "$1"
+  else
+    cat "${1}.gz" | gunzip
+  fi
+}
+
+cat-path() {
+  local URL_PATH="$1"
+  if (echo "$URL_PATH" | egrep -q '^v2/apps/.+'); then
+    # since we're working with a diagnostic bundle, we're going to emulate this endpoint by searching through all of the apps and filtering down to the selected one
+    APP_ID="${URL_PATH:7}"
+    cat-path "v2/apps" | jq -M -c '.apps[] | select(.id == "'"$APP_ID"'")'
+  else
+
+    URL_HOSTNAME=$(echo $URL_AUTHORITY | cut -f 1 -d :)
+    URL_PORT=$(echo $URL_AUTHORITY | cut -f 2 -d :)
+
+    PATH_FILENAME=$(echo "$URL_PATH" | cut -f 1 -d ? | sed 's|/|_|g')
+
+    PREFIX=${URL_HOSTNAME}_master/${URL_PORT}:${PATH_FILENAME}.json
+
+    cat-maybe-gzip "$PREFIX"
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -13,14 +40,4 @@ done
 URL_AUTHORITY=$(echo "$URL" | cut -f 3 -d /)
 URL_PATH=$(echo "$URL" | cut -f 4-9 -d /)
 
-URL_HOSTNAME=$(echo $URL_AUTHORITY | cut -f 1 -d :)
-URL_PORT=$(echo $URL_AUTHORITY | cut -f 2 -d :)
-
-PATH_FILENAME=$(echo "$URL_PATH" | cut -f 1 -d ? | sed 's|/|_|g')
-
-PREFIX=${URL_HOSTNAME}_master/${URL_PORT}:${PATH_FILENAME}.json
-if [ -f "$PREFIX" ]; then
-  cat "$PREFIX"
-else
-  cat "${PREFIX}.gz" | gunzip
-fi
+cat-path "$URL_PATH"

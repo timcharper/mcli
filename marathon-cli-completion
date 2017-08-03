@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 _comp_marathon_join-str() {
   delimiter="$1"
@@ -58,6 +58,32 @@ _comp_marathon_tasks() {
   esac
 }
 
+_comp_marathon_task() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli tasks -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon_app() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli apps -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
 _comp_marathon_apps() {
   case "${cur}" in
     -*)
@@ -82,7 +108,7 @@ _comp_marathon_apps() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "id cmd cpus mem disk gpus executor backoffSeconds backoffFactor maxLaunchDelaySeconds version residency killSelection requirePorts tasksStaged tasksHealthy tasksUnhealthy ports container-type docker-network-type volume-count docker-image lastScalingAt lastConfigChangeAt deployment-count health-checks-count instances" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default id cmd cpus mem disk gpus executor backoffSeconds backoffFactor maxLaunchDelaySeconds version residency killSelection requirePorts tasksStaged tasksHealthy tasksUnhealthy ports container-type docker-network-type volume-count docker-image lastScalingAt lastConfigChangeAt deployment-count health-checks-count instances" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"
@@ -100,7 +126,7 @@ _comp_marathon() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl apps" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl tasks task apps app" -- ${cur}) )
 
     return 0
   fi
@@ -111,8 +137,14 @@ _comp_marathon() {
     curl)
       _comp_marathon_curl
       ;;
+    task)
+      _comp_marathon_task
+      ;;
     tasks)
       _comp_marathon_tasks
+      ;;
+    app)
+      _comp_marathon_app
       ;;
     apps)
       _comp_marathon_apps

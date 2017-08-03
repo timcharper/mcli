@@ -16,7 +16,7 @@ if [ "$progname" != "marathon-cli" ]; then
   INVOCATION="$0"
 else
   cmd=$1
-  shift || (help; exit 1)
+  shift
   INVOCATION="$0 $cmd"
 fi
 
@@ -33,11 +33,140 @@ Usage: ${INVOCATION} <cmd> [<options...>]
 Commands:
 
   - apps         : list marathon apps
+  - app          : get info about a specific app
+  - tasks        : list marathon tasks
+  - task         : show info about a specific Marathon task
   - curl         : curl Marathon
 
 For help on commands, $0 <cmd> --help
 
 EOF
+}
+
+task-help() {
+  cat <<EOF
+Show the full JSON details for a Marathon task
+
+usage: ${INVOCATION} <id>
+
+  Options:
+
+  --color         - Force color output. By default, color output is enabled if
+                    STDOUT is a terminal.
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
+app-help() {
+  cat <<EOF
+Show the full JSON details for a Marathon app.
+
+usage: ${INVOCATION} <id>
+
+  Options:
+
+  --color         - Force color output. By default, color output is enabled if
+                    STDOUT is a terminal.
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
+task() {
+  declare -a otherargs
+  local color_output=""
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        inspect-help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        task-help
+        exit 1
+        ;;
+      *)
+        otherargs+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#otherargs[@]}" -ne 1 ]; then
+    echo "expected one argument specifying an app id; got ${otherargs[@]}"
+    task-help
+    exit 1
+  fi
+
+  task_id="${otherargs[0]}"
+
+  marathon-curl "/v2/tasks" | jq $color_output '.tasks[] | select(.id == "'"$task_id"'")'
+}
+
+app() {
+  declare -a otherargs
+  local color_output=""
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        inspect-help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        app-help
+        exit 1
+        ;;
+      *)
+        otherargs+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#otherargs[@]}" -ne 1 ]; then
+    echo "expected one argument specifying an app id; got ${otherargs[@]}"
+    app-help
+    exit 1
+  fi
+
+  app_id="${otherargs[0]}"
+
+  marathon-curl "/v2/apps${app_id}" | jq $color_output '.'
 }
 
 tasks-help() {
@@ -425,7 +554,9 @@ fi
 
 case "$cmd" in
   apps) apps "$@" ;;
+  app) app "$@" ;;
   tasks) tasks "$@" ;;
+  task) task "$@" ;;
   curl) marathon-curl "$@" ;;
   *) echo "unrecognized command: $cmd"; help; exit 1 ;;
 esac

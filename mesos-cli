@@ -16,7 +16,7 @@ if [ "$progname" != "mesos-cli" ]; then
   INVOCATION="$0"
 else
   cmd=$1
-  shift || (help; exit 1)
+  shift
   INVOCATION="$0 $cmd"
 fi
 
@@ -34,8 +34,8 @@ Commands:
 
   - curl         : curl helper for mesos; first arg URI, rest forwarded to curl.
   - executor-url : show the executor-url for a given task
-  - inspect      : inspect a mesos task
-  - ps           : list mesos processes
+  - tasks        : list mesos tasks
+  - task         : inspect a mesos task
   - frameworks   : list frameworks
   - agents       : list agents
   - sandbox      : show the sandbox for a given task
@@ -82,7 +82,7 @@ usage: ${INVOCATION} [options...]
 
   Options:
 
-  --all, -a                    - List all mesos tasks
+  --all, -a                    - List all mesos agents
 
   --sort, -s <col1,col2,...>   - sort output by the columns; see column list
                                  below.
@@ -180,7 +180,7 @@ column list:
 EOF
 }
 
-ps-help() {
+tasks-help() {
   cat <<EOF
 List mesos tasks in the cluster.
 
@@ -230,7 +230,7 @@ column list:
 EOF
 }
 
-inspect-help() {
+task-help() {
   cat <<EOF
 Show the full JSON details for a mesos task. Paginates backwards by
 MESOS_PAGINATE_SIZE (default 1000) until it finds the task.
@@ -295,7 +295,7 @@ join-str() {
   echo -n "$OUTPUT"
 }
 
-inspect() {
+task() {
   declare -a OTHERARGS
   local COLOR_OUTPUT=""
   if [ -t 1 ]; then
@@ -310,7 +310,7 @@ inspect() {
     shift
     case "$arg" in
       --help)
-        inspect-help
+        task-help
         exit 0
         ;;
       --color)
@@ -321,7 +321,7 @@ inspect() {
         ;;
       -*)
         echo "Unrecognized argument: $arg" 1>&2
-        inspect-help
+        task-help
         exit 1
         ;;
       *)
@@ -332,7 +332,7 @@ inspect() {
 
   if [ "${#OTHERARGS[@]}" -ne 1 ]; then
     echo "expected one argument specifying a task id; got ${OTHERARGS[@]}"
-    inspect-help
+    task-help
     exit 1
   fi
 
@@ -389,7 +389,7 @@ executor-url() {
     exit 1
   fi
 
-  inspect "${OTHERARGS[0]}" | jq '"'$MESOS_GUI_URL'/#/'$MESOS_AGENT_NAME'/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + (if .executor_id == "" then .id else .executor_id end)' -r
+  task "${OTHERARGS[0]}" | jq '"'$MESOS_GUI_URL'/#/'$MESOS_AGENT_NAME'/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + (if .executor_id == "" then .id else .executor_id end)' -r
 }
 
 
@@ -432,7 +432,7 @@ sandbox() {
 
 
   ID="${OTHERARGS[0]}"
-  inspect "$ID" --no-color | jq '"'${MESOS_HTTP_PROTO}'://" + .host + ":5051/state"' -r | while read url; do
+  task "$ID" --no-color | jq '"'${MESOS_HTTP_PROTO}'://" + .host + ":5051/state"' -r | while read url; do
     $MESOS_CURL_CMD -s "$url" | jq '[.frameworks, .completed_frameworks] | add | map([.executors, .completed_executors]) | flatten | map( { "directory": .directory, "tasks": ([.tasks, .queued_tasks, .completed_tasks] | add | map(select(.id == "'"${ID}"'"))) })[] | select(.tasks | length > 0) | .directory' -r | while read sandbox_path; do
       if $SHOW_URL; then
         eval "$(mesos-vars "$sandbox_path")"
@@ -742,7 +742,7 @@ frameworks() {
   fi
 }
 
-ps() {
+tasks() {
   declare -a OTHERARGS
   declare -a COLUMNS
   declare -a HEADERS
@@ -783,12 +783,12 @@ ps() {
         ;;
       -*)
         echo "Unrecognized option $arg" 1>&2
-        ps-help
+        tasks-help
         exit 1
         ;;
       *)
         echo "Unexpected argument: $arg" 1>&2
-        ps-help
+        tasks-help
         exit 1
         ;;
     esac
@@ -878,7 +878,7 @@ ps() {
           ;;
         *)
           echo "Unknown column: $col" 1>&2
-          ps-help
+          tasks-help
           exit 1
           ;;
       esac
@@ -927,11 +927,11 @@ fi
 
 case "$cmd" in
   curl) mesos-curl "$@" ;;
-  ps) ps "$@" ;;
+  ps|tasks) tasks "$@" ;;
   frameworks) frameworks "$@" ;;
   agents) agents "$@" ;;
   executor-url) executor-url "$@" ;;
-  inspect) inspect "$@" ;;
+  inspect|task) task "$@" ;;
   sandbox) sandbox "$@" ;;
   curl) mesos-curl "$@" ;;
   *) echo "unrecognized command: $cmd"; help; exit 1 ;;
