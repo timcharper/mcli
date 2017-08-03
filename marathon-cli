@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 
-: ${MARATHON_PAGINATE_SIZE:=1000}
 : ${MARATHON_CURL_CMD:=curl}
 : ${MARATHON_CLI_CFG:=/etc/default/mesos-cli}
 : ${MARATHON_HTTP_PROTO:=http}
 : ${MARATHON_MASTER_URL:=${MARATHON_HTTP_PROTO}://marathon.mesos:8080}
-: ${MARATHON_GUI_URL:=http://leader.mesos}
-# for compat with pre mesos 1.0.0, set to slaves
-: ${MARATHON_AGENT_NAME:=agents}
 
 progname=$(basename "$0")
 
