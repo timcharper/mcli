@@ -227,6 +227,7 @@ usage: ${INVOCATION} [options...]
 column list:
 
       default      - Group: id version instances
+      taskCounts   - Group: tasksStaged tasksRunning tasksHealthy tasksUnhealthy
 
       id                   - App id
       cmd                  - command to run
@@ -244,6 +245,8 @@ column list:
       killSelection        - When scaling down, kill what?
       requirePorts         - Host networking concept; read the docs
       tasksStaged          - # of tasks currently staged
+      tasksRunning         - " running
+
       tasksHealthy         - " healthy
       tasksUnhealthy       - " staged
       ports                - Host networking concept; read the docs
@@ -253,8 +256,9 @@ column list:
       docker-image         - Docker image used for provisioning container
       lastScalingAt        - Last time app scaled up or down (this does not affect the version)
       lastConfigChangeAt   - Last time app config was changed
-      deployment-count     - # of pending deployments associated with this app
-      health-checks-count  - # of health checks assigned to app
+      deploymentCount      - # of pending deployments associated with this app
+      healthCheckCount     - # of health checks assigned to app
+      healthCheckType      - List of health check types
 
 EOF
 }
@@ -283,8 +287,18 @@ marathon-curl() {
   URI=$1
   shift
 
-  echo 'user = "'$MARATHON_PRINCIPAL':'$MARATHON_SECRET'"' | $MARATHON_CURL_CMD -K - -s -H "Content-Type: application/json" ${MARATHON_MASTER_URL}${URI} "${@}"
-  return 1
+  if ! (echo 'user = "'$MARATHON_PRINCIPAL':'$MARATHON_SECRET'"' | $MARATHON_CURL_CMD -K - -s -H "Content-Type: application/json" ${MARATHON_MASTER_URL}${URI} "${@}"); then
+    cat <<-'EOF' 1>&2
+
+
+Curl invocation unsuccessful; Try rerunning curl with -v flag to debug
+
+    MARATHON_CURL_CMD="${MARATHON_CURL_CMD:-curl} -v" marathon-cli ...
+
+
+EOF
+    exit 1
+  fi
 }
 
 join-str() {
@@ -362,6 +376,11 @@ tasks() {
         healthCheckResults)
           HEADERS+=($col)
           COLUMNS+=(.$col)
+          ;;
+
+        healthCheckAlive)
+          HEADERS+=($col)
+          COLUMNS+=('((.healthCheckResults // []) | map(.alive | tostring) | join(","))')
           ;;
 
         ipAddresses)
@@ -462,7 +481,10 @@ apps() {
         default)
           interprete-cols id version instances
           ;;
-        id|cmd|cpus|mem|disk|gpus|executor|backoffSeconds|backoffFactor|maxLaunchDelaySeconds|version|residency|killSelection|requirePorts|tasksStaged|tasksHealthy|tasksUnhealthy|instances)
+        taskCounts)
+          interprete-cols tasksRunning tasksStaged tasksHealthy tasksUnhealthy
+          ;;
+        id|cmd|cpus|mem|disk|gpus|executor|backoffSeconds|backoffFactor|maxLaunchDelaySeconds|version|residency|killSelection|requirePorts|tasksRunning|tasksStaged|tasksHealthy|tasksUnhealthy|instances)
           HEADERS+=($col)
           COLUMNS+=(.$col)
           ;;
@@ -494,14 +516,19 @@ apps() {
           HEADERS+=($col)
           COLUMNS+=(.versionInfo.lastConfigChangeAt)
           ;;
-        deployment-count)
+        deploymentCount)
           HEADERS+=('# deployments')
           COLUMNS+=('(.deployments | length)')
           ;;
-        health-checks-count)
+        healthCheckCount)
           HEADERS+=('# healthChecks')
           COLUMNS+=('(.healthChecks | length)')
           ;;
+        healthCheckType)
+          HEADERS+=('healthCheckType')
+          COLUMNS+=('(.healthChecks | map(.protocol) | join(","))')
+          ;;
+
         *)
           echo "Unknown column: $col" 1>&2
           apps-help

@@ -108,7 +108,7 @@ _comp_marathon_apps() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "default id cmd cpus mem disk gpus executor backoffSeconds backoffFactor maxLaunchDelaySeconds version residency killSelection requirePorts tasksStaged tasksHealthy tasksUnhealthy ports container-type docker-network-type volume-count docker-image lastScalingAt lastConfigChangeAt deployment-count health-checks-count instances" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default id cmd cpus mem disk gpus executor backoffSeconds backoffFactor maxLaunchDelaySeconds version residency killSelection requirePorts taskCounts tasksStaged tasksRunning tasksHealthy tasksUnhealthy ports container-type docker-network-type volume-count docker-image lastScalingAt lastConfigChangeAt deploymentCount healthCheckCount healthCheckType instances" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"

@@ -15,12 +15,7 @@ cat-path() {
     APP_ID="${URL_PATH:7}"
     cat-path "v2/apps" | jq -M -c '.apps[] | select(.id == "'"$APP_ID"'")'
   else
-
-    URL_HOSTNAME=$(echo $URL_AUTHORITY | cut -f 1 -d :)
-    URL_PORT=$(echo $URL_AUTHORITY | cut -f 2 -d :)
-
     PATH_FILENAME=$(echo "$URL_PATH" | cut -f 1 -d ? | sed 's|/|_|g')
-
     PREFIX=${URL_HOSTNAME}_master/${URL_PORT}:${PATH_FILENAME}.json
 
     cat-maybe-gzip "$PREFIX"
@@ -39,5 +34,7 @@ done
 
 URL_AUTHORITY=$(echo "$URL" | cut -f 3 -d /)
 URL_PATH=$(echo "$URL" | cut -f 4-9 -d /)
+URL_HOSTNAME=$(echo $URL_AUTHORITY | cut -f 1 -d :)
+URL_PORT=$(echo $URL_AUTHORITY | cut -f 2 -d :)
 
 cat-path "$URL_PATH"

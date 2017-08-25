@@ -267,13 +267,13 @@ EOF
 mesos-curl() {
   if [ "$1" = "--help" ] || [ -z "$1" ]; then
     mesos-curl-help
+    return 1
   fi
 
   URI=$1
   shift
 
-  echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | $MESOS_CURL_CMD -K - -s -H "Content-Type: application/json" ${MESOS_MASTER_URL}${URI} "${@}"
-  return 1
+  echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | $MESOS_CURL_CMD -L -K - -s -f -H "Content-Type: application/json" ${MESOS_MASTER_URL}${URI} "${@}"
 }
 
 slave-map() {
