@@ -264,6 +264,14 @@ See curl --help for description of other options
 EOF
 }
 
+curl-with-auth() {
+  if [ -z "$MESOS_PRINCIPAL" ]; then
+    $MESOS_CURL_CMD "${@}"
+  else
+    echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | $MESOS_CURL_CMD -K - "${@}"
+  fi
+}
+
 mesos-curl() {
   if [ "$1" = "--help" ] || [ -z "$1" ]; then
     mesos-curl-help
@@ -273,7 +281,17 @@ mesos-curl() {
   URI=$1
   shift
 
-  echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | $MESOS_CURL_CMD -L -K - -s -f -H "Content-Type: application/json" ${MESOS_MASTER_URL}${URI} "${@}"
+  if ! (curl-with-auth -s -f -H "Content-Type: application/json" ${MESOS_MASTER_URL}${URI} "${@}"); then
+    cat <<-'EOF' 1>&2
+
+Curl invocation unsuccessful; Try rerunning curl with -v flag to debug
+
+    MESOS_CURL_CMD="${MESOS_CURL_CMD:-curl} -v" mesos-cli ...
+
+
+EOF
+    exit 1
+  fi
 }
 
 slave-map() {
