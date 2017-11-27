@@ -82,7 +82,7 @@ _comp_mesos_agents() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "default id hostname port version active pid roles attributes cpus mem disk gpus ports used-cpus used-mem used-disk used-gpus reserved-cpus reserved-mem reserved-disk reserved-gpus registered" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default id hostname domain port version active pid roles attributes cpus mem disk gpus ports used-cpus used-mem used-disk used-gpus reserved-cpus reserved-mem reserved-disk reserved-gpus registered" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"

@@ -1,10 +1,10 @@
 diagnostic() {
-  MASTER_IP="$(ls -d -w1 *_master | head -n 1 | sed 's/_master//')"
-  MARATHON_PORT=$(ls -w1 ${MASTER_IP}_master/*:v2_apps.json.gz | cut -f 2 -d / | cut -f 1 -d :)
-  echo "Master IP is $MASTER_IP"
-  echo "Marathon port is $MARATHON_PORT"
+  local MESOS_MASTER_IP="$(ls -d -w1 *_master | head -n 1 | sed 's/_master//')"
+  local MARATHON_LEADER=$(find *_master/*-v2_leader.json.gz | head -n 1  | xargs gzcat | jq .leader -r)
+  echo "Mesos Master IP is $MESOS_MASTER_IP"
+  echo "Marathon leader is $MARATHON_LEADER"
   export MESOS_CURL_CMD=diagnostic-curl-mesos
   export MARATHON_CURL_CMD=diagnostic-curl-marathon
-  export MESOS_MASTER_URL=http://${MASTER_IP}:5050
-  export MARATHON_MASTER_URL=http://${MASTER_IP}:${MARATHON_PORT}
+  export MESOS_MASTER_URL=http://${MESOS_MASTER_IP}:5050
+  export MARATHON_MASTER_URL=http://${MARATHON_LEADER}
 }

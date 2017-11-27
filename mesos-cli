@@ -100,7 +100,8 @@ column list:
 
       default       - id hostname roles
       id            - Agent id
-      hostname
+      hostname      - Agent hostname
+      domain        - Agent fault domain (region/zone)
       port          - Port on which agent is listening (HTTP)
       version
       active
@@ -227,6 +228,7 @@ column list:
       agent_id     - Agent (slave) id
       framework_id - Id of framework that launched this task
       executor_id  - Executor id
+      domain       - Agent fault domain (region/zone)
 EOF
 }
 
@@ -295,7 +297,7 @@ EOF
 }
 
 slave-map() {
-  mesos-curl /state-summary | jq '.slaves | map({ (.id) : .hostname }) | add'
+  mesos-curl /state-summary | jq '.slaves | map({ (.id) : {domain: .domain, hostname: .hostname} }) | add'
 }
 
 
@@ -543,6 +545,10 @@ agents() {
         used-disk|used-mem|used-gpus|used-cpus)
           HEADERS+=($col)
           COLUMNS+=(.used_resources.${col:5})
+          ;;
+        domain)
+          HEADERS+=($col)
+          COLUMNS+=('(if (.domain != null) then (.domain.fault_domain.region.name + "/" + .domain.fault_domain.zone.name) else "" end)')
           ;;
         reserved-disk|reserved-mem|reserved-gpus|reserved-cpus)
           HEADERS+=($col)
@@ -799,6 +805,12 @@ tasks() {
       --no-align)
         NO_ALIGN=true
         ;;
+      -f|--filter)
+        FILTER_COL=$(echo "$1" | cut -f 1 -d =)
+        FILTER_VALUE=$(echo "$1" | cut -f 2 -d =)
+        echo FILTER_COL = $FILTER_COL
+        shift
+        ;;
       -*)
         echo "Unrecognized option $arg" 1>&2
         tasks-help
@@ -868,7 +880,7 @@ tasks() {
           ;;
         h|host)
           HEADERS+=(host)
-          COLUMNS+=('$slaves[.slave_id]')
+          COLUMNS+=('$slaves[.slave_id].hostname')
           ;;
         agent_id)
           HEADERS+=(agent_id)
@@ -893,6 +905,10 @@ tasks() {
         url)
           HEADERS+=(url)
           COLUMNS+=('"'$MESOS_GUI_URL'/#/'$MESOS_AGENT_NAME'/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + ((if .executor_id == "" then .id else .executor_id end) | @uri)')
+          ;;
+        domain)
+          HEADERS+=($col)
+          COLUMNS+=('(if ($slaves[.slave_id].domain != null) then ($slaves[.slave_id].domain.fault_domain.region.name + "/" + $slaves[.slave_id].domain.fault_domain.zone.name) else "" end)')
           ;;
         *)
           echo "Unknown column: $col" 1>&2

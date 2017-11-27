@@ -2,9 +2,9 @@
 
 cat-maybe-gzip() {
   if [ -f "$1" ]; then
-    cat "$1"
+    cat $1
   else
-    cat "${1}.gz" | gunzip
+    cat ${1}.gz | gunzip
   fi
 }
 
@@ -16,7 +16,7 @@ cat-path() {
     cat-path "v2/apps" | jq -M -c '.apps[] | select(.id == "'"$APP_ID"'")'
   else
     PATH_FILENAME=$(echo "$URL_PATH" | cut -f 1 -d ? | sed 's|/|_|g')
-    PREFIX=${URL_HOSTNAME}_master/${URL_PORT}:${PATH_FILENAME}.json
+    PREFIX=${URL_HOSTNAME}_master/${URL_PORT}?${PATH_FILENAME}.json
 
     cat-maybe-gzip "$PREFIX"
   fi

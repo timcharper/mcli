@@ -71,6 +71,32 @@ _comp_marathon_task() {
   esac
 }
 
+_comp_marathon_restart_app() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color --force" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli apps -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon_delete_app() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color --force" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli apps -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
 _comp_marathon_app() {
   case "${cur}" in
     -*)
@@ -126,7 +152,7 @@ _comp_marathon() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl tasks task apps app" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl tasks task apps app delete-app restart-app" -- ${cur}) )
 
     return 0
   fi
@@ -142,6 +168,12 @@ _comp_marathon() {
       ;;
     tasks)
       _comp_marathon_tasks
+      ;;
+    restart-app)
+      _comp_marathon_restart_app
+      ;;
+    delete-app)
+      _comp_marathon_delete_app
       ;;
     app)
       _comp_marathon_app
