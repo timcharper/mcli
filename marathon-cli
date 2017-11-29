@@ -338,11 +338,11 @@ usage: ${INVOCATION} [options...]
 
 column list:
 
-      default      - Group: id state startedAt host
+      default               - Group: id state startedAt host
       id
-      host
-      appId
-      stagedAt
+      host                  - Host on which the task is running
+      appId                 - AppId for this instance
+      stagedAt              - Time at which the task was staged
       startedAt
       state
       version
@@ -350,6 +350,10 @@ column list:
       servicePorts
       ipAddresses
       agentId
+      hcFirstSuccess        - Health check first success (comma delimited if multiple)
+      hcLastFailure         - "            last failure
+      hcConsecutiveFailures - "            consecutive failures
+      hcAlive               - "            instance considered healthy
 EOF
 }
 
@@ -408,8 +412,8 @@ column list:
       lastScalingAt        - Last time app scaled up or down (this does not affect the version)
       lastConfigChangeAt   - Last time app config was changed
       deploymentCount      - # of pending deployments associated with this app
-      healthCheckCount     - # of health checks assigned to app
-      healthCheckType      - List of health check types
+      hcCount              - # of health checks assigned to app
+      hcType               - List of health check types
 
 EOF
 }
@@ -533,12 +537,30 @@ tasks() {
           COLUMNS+=('((.'$col'[0:3] | map(tostring) | join(",")) + (if ((.'$col' | length) <= 3) then "" else ",..." end))')
           ;;
 
+        hcConsecutiveFailures)
+          HEADERS+=($col)
+          COLUMNS+=('(.healthCheckResults // [] | map(.consecutiveFailures | tostring) | join(","))')
+          ;;
+        hcLastFailure)
+          HEADERS+=($col)
+          COLUMNS+=('(.healthCheckResults // [] | map(.lastFailure | gsub("\\.[0-9]+"; "")) | join(","))')
+          ;;
+        hcLastSuccess)
+          HEADERS+=($col)
+          COLUMNS+=('(.healthCheckResults // [] | map(.lastSuccess | gsub("\\.[0-9]+"; "")) | join(","))')
+          ;;
+
+        hcFirstSuccess)
+          HEADERS+=($col)
+          COLUMNS+=('(.healthCheckResults // [] | map(.firstSuccess | gsub("\\.[0-9]+"; "")) | join(","))')
+          ;;
+
         healthCheckResults)
           HEADERS+=($col)
           COLUMNS+=(.$col)
           ;;
 
-        healthCheckAlive)
+        hcAlive)
           HEADERS+=($col)
           COLUMNS+=('((.healthCheckResults // []) | map(.alive | tostring) | join(","))')
           ;;
@@ -680,12 +702,12 @@ apps() {
           HEADERS+=('# deployments')
           COLUMNS+=('(.deployments | length)')
           ;;
-        healthCheckCount)
+        hcCount)
           HEADERS+=('# healthChecks')
           COLUMNS+=('(.healthChecks | length)')
           ;;
-        healthCheckType)
-          HEADERS+=('healthCheckType')
+        hcType)
+          HEADERS+=('healthCheck type')
           COLUMNS+=('(.healthChecks | map(.protocol) | join(","))')
           ;;
 
@@ -818,11 +840,11 @@ pods() {
           HEADERS+=('# deployments')
           COLUMNS+=('(.deployments | length)')
           ;;
-        healthCheckCount)
+        hcCount)
           HEADERS+=('# healthChecks')
           COLUMNS+=('(.healthChecks | length)')
           ;;
-        healthCheckType)
+        hcType)
           HEADERS+=('healthCheckType')
           COLUMNS+=('(.healthChecks | map(.protocol) | join(","))')
           ;;

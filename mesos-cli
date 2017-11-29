@@ -121,7 +121,7 @@ column list:
       reserved-mem  - Total reserved mem (used and unused)
       reserved-disk - Total reserved disk (used and unused)
       reserved-gpus - Total reserved GPUs (used and unused)
-      registered    - Time and which the agent was registered
+      registered    - Time at which the agent was registered
 
 EOF
 }
@@ -134,7 +134,7 @@ usage: ${INVOCATION} [options...]
 
   Options:
 
-  --all, -a                    - List all mesos tasks
+  --all, -a                    - List all mesos frameworks (inactive and unregistered)
 
   --sort, -s <col1,col2,...>   - sort output by the columns; see column list
                                  below.
@@ -177,6 +177,9 @@ column list:
       active             - Is the framework active?
       ui                 - Registered Web UI URL
       capabilities       - Registered capabilities
+      registered         - Time at which the framework was registered
+      unregistered       - Time at which the framework was unregistered, if any
+      failover_timeout   - Failover timeout (in days)
 
 EOF
 }
@@ -717,11 +720,26 @@ frameworks() {
           HEADERS+=(ui)
           COLUMNS+=(.webui_url)
           ;;
+
+        registered)
+          HEADERS+=($col)
+          COLUMNS+=('(.registered_time | todate)')
+          ;;
+
+        unregistered)
+          HEADERS+=($col)
+          COLUMNS+=('(if (.unregistered_time == 0) then "" else .unregistered_time | todate end)')
+          ;;
+
         capabilities)
           HEADERS+=(capabilities)
           COLUMNS+=('(.capabilities | join(","))')
           ;;
           
+        failover_timeout)
+          HEADERS+=(failover_timeout)
+          COLUMNS+=('((.failover_timeout / 8640 | floor / 10 | tostring) + " days")')
+          ;;
         *)
           echo "Unknown column: $col" 1>&2
           frameworks-help
@@ -738,7 +756,7 @@ frameworks() {
   HEADERS=()
   interprete-cols $COLUMN_LIST
   if ! $ALL; then
-    SELECTS+=('select(.active == true)')
+    SELECTS+=('select(.active == true  and .unregistered_time == 0)')
   fi
 
   output-it() {
@@ -756,7 +774,7 @@ frameworks() {
       SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
     fi
 
-    jq -r '.frameworks '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' <(mesos-curl "/state-summary")
+    jq -r '[.frameworks[], .unregistered_frameworks[], .completed_frameworks[]] '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' <(mesos-curl "/frameworks")
   }
 
   if $NO_ALIGN; then
