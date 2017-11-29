@@ -12,7 +12,7 @@ done
 
 path-filename() {
   # we ignore query strings
-  echo ${URL_HOSTNAME}_master/${URL_PORT}-master_$(echo "$1" | cut -f 1 -d ? | sed 's|/|_|g').json.gz
+  echo ${URL_HOSTNAME}_master/${URL_PORT}${BUNDLE_PORT_DELIMITER}master_$(echo "$1" | cut -f 1 -d ? | sed 's|/|_|g').json.gz
 }
 
 cat-path() {
