@@ -1,5 +1,5 @@
 #!/bin/sh
 
-# OS X column command is broken treats two tabs in a row as one. This script works around that.
+# OS X column command is broken and treats two tabs in a row as one. This script works around that.
 
 cat - | sed $'s/\t\t/\t \t/' | /usr/bin/column "$@" 
