@@ -434,12 +434,19 @@ See curl --help for description of other options
 EOF
 }
 
+escape-args() {
+  while [ "$#" -gt 0 ]; do
+    printf " %q" "$1"
+    shift
+  done
+  printf "\n"
+}
 
 curl-with-auth() {
   if [ -z "$MARATHON_PRINCIPAL" ]; then
-    $MARATHON_CURL_CMD "${@}"
+    eval "$MARATHON_CURL_CMD $(escape-args "${@}")"
   else
-    echo 'user = "'$MARATHON_PRINCIPAL':'$MARATHON_SECRET'"' | $MARATHON_CURL_CMD -K - "${@}"
+    echo 'user = "'$MARATHON_PRINCIPAL':'$MARATHON_SECRET'"' | eval "$MARATHON_CURL_CMD -K - $(escape-args "${@}")"
   fi
 }
 
@@ -543,7 +550,7 @@ tasks() {
           ;;
         hcLastFailure)
           HEADERS+=($col)
-          COLUMNS+=('(.healthCheckResults // [] | map(.lastFailure | gsub("\\.[0-9]+"; "")) | join(","))')
+          COLUMNS+=('(.healthCheckResults // [] | map(.lastFailure // "" | gsub("\\.[0-9]+"; "")) | join(","))')
           ;;
         hcLastSuccess)
           HEADERS+=($col)

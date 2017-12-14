@@ -269,11 +269,19 @@ See curl --help for description of other options
 EOF
 }
 
+escape-args() {
+  while [ "$#" -gt 0 ]; do
+    printf " %q" "$1"
+    shift
+  done
+  printf "\n"
+}
+
 curl-with-auth() {
   if [ -z "$MESOS_PRINCIPAL" ]; then
-    $MESOS_CURL_CMD "${@}"
+    eval "$MESOS_CURL_CMD $(escape-args "${@}")"
   else
-    echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | $MESOS_CURL_CMD -K - "${@}"
+    echo 'user = "'$MESOS_PRINCIPAL':'$MESOS_SECRET'"' | eval "$MESOS_CURL_CMD -K - $(escape-args "${@}")"
   fi
 }
 
