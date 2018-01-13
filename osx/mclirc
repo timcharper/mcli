@@ -3,5 +3,5 @@ source $HOME/.bashrc
 echo "le completion"
 source $MCLIPATH/mesos-cli-completion
 source $MCLIPATH/marathon-cli-completion
-source $MCLIPATH/diagnostic-support
+source $MCLIPATH/dcos-support
 alias mcli=mesos-cli

@@ -1,5 +1,19 @@
-diagnostic() {
+target-dcos() {
+  export AUTH_TOKEN="$(dcos config show core.dcos_acs_token)"
+  export MARATHON_CURL_CMD='curl -H Authorization:\ token='${AUTH_TOKEN}
+  export MARATHON_MASTER_URL="$(dcos config show core.dcos_url)/marathon"
+  export MESOS_CURL_CMD='curl -H Authorization:\ token='${AUTH_TOKEN}
+  export MESOS_MASTER_URL="$(dcos config show core.dcos_url)/mesos"
+}
+
+target-bundle() {
   local MESOS_MASTER_IP="$(ls -d -w1 *_master | head -n 1 | sed 's/_master//')"
+  if [ -z "$MESOS_MASTER_IP" ]; then
+    echo
+    echo "To use this command, first, change the directory to the root of an unzipped bundle, and re-run."
+    echo
+    return 1
+  fi
   local MARATHON_LEADER_FILE=$(find *_master/*v2_leader.json.gz | head -n 1)
   export BUNDLE_PORT_DELIMITER=$(basename $MARATHON_LEADER_FILE | sed 's/[0-9]//g' | head -c 1)
   local MARATHON_LEADER_IP=$(gzcat "$MARATHON_LEADER_FILE" | jq .leader -r | cut -f 1 -d ":")

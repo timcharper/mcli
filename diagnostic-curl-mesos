@@ -22,7 +22,7 @@ cat-path() {
     RECONST_FILENAME="$(path-filename tasks-reconst)"
     if [ ! -f "$RECONST_FILENAME" ]; then
       ( printf '{"tasks":'
-        cat-path "state" | jq -M -c '.frameworks | map(.tasks) | flatten'
+        cat-path "state" | jq -M -c '.frameworks | map([.tasks, .unreachable_tasks, .completed_tasks]) | flatten'
         printf '}'
       ) | gzip > "$RECONST_FILENAME"
     fi
