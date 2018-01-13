@@ -51,6 +51,8 @@ You must first install jq, bash 4; homebrew is recommended.
 ```
 brew install bash
 brew install jq
+# default version targets bash 3 and is too old
+brew install bash-completion@2
 ```
 
 Bash 4 must be linked to `/usr/local/bin/bash`; it may not be, by default. To link it:
