@@ -46,7 +46,7 @@ _comp_mesos_tasks() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "default id name cpus mem gpus disk ports state type image host ip ips url started finished framework_id executor_id agent_id" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default id name cpus mem gpus disk ports state type image host ip ips url started finished framework_id executor_id agent_id region zone domain" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"
@@ -82,7 +82,7 @@ _comp_mesos_agents() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "default id hostname domain port version active pid roles attributes cpus mem disk gpus ports used-cpus used-mem used-disk used-gpus reserved-cpus reserved-mem reserved-disk reserved-gpus registered" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default id hostname region zone domain port version active pid roles attributes cpus mem disk gpus ports used-cpus used-mem used-disk used-gpus reserved-cpus reserved-mem reserved-disk reserved-gpus registered" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"

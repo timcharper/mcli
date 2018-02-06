@@ -6,6 +6,11 @@ target-dcos() {
   export MESOS_MASTER_URL="$(dcos config show core.dcos_url)/mesos"
 }
 
+auto-trust-cert() {
+  export MESOS_CURL_CMD="${MESOS_CURL_CMD:-curl} -k"
+  export MARATHON_CURL_CMD="${MESOS_CURL_CMD:-curl} -k"
+}
+
 target-bundle() {
   local MESOS_MASTER_IP="$(ls -d -w1 *_master | head -n 1 | sed 's/_master//')"
   if [ -z "$MESOS_MASTER_IP" ]; then

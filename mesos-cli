@@ -122,6 +122,9 @@ column list:
       reserved-disk - Total reserved disk (used and unused)
       reserved-gpus - Total reserved GPUs (used and unused)
       registered    - Time at which the agent was registered
+      domain        - Fault domain: region/zone
+      zone          - Fault domain: region
+      region        - Fault domain: zone
 
 EOF
 }
@@ -231,7 +234,9 @@ column list:
       agent_id     - Agent (slave) id
       framework_id - Id of framework that launched this task
       executor_id  - Executor id
-      domain       - Agent fault domain (region/zone)
+      domain       - Agent fault domain: region/zone
+      zone         - Agent fault domain: region
+      region       - Agent fault domain: zone
 EOF
 }
 
@@ -380,7 +385,7 @@ task() {
       CONTINUE=0
     fi
 
-    FORMATTED_RESULTS="$(jq $COLOR_OUTPUT '.[0] as $slaves | .[1].matches[] | ([{ "id": .id, "name": .name, "host": $slaves[.slave_id] }, .] | add)' -s <(echo "$SLAVE_MAP") <(echo "$RESULT"))"
+    FORMATTED_RESULTS="$(jq $COLOR_OUTPUT '.[0] as $slaves | .[1].matches[] | ([{ "id": .id, "name": .name }, $slaves[.slave_id], .] | add)' -s <(echo "$SLAVE_MAP") <(echo "$RESULT"))"
 
     if [ -z "$FORMATTED_RESULTS" ]; then
       OFFSET=$((OFFSET + MESOS_PAGINATE_SIZE))
@@ -556,6 +561,14 @@ agents() {
         used-disk|used-mem|used-gpus|used-cpus)
           HEADERS+=($col)
           COLUMNS+=(.used_resources.${col:5})
+          ;;
+        zone)
+          HEADERS+=($col)
+          COLUMNS+=('(if (.domain != null) then (.domain.fault_domain.zone.name) else "" end)')
+          ;;
+        region)
+          HEADERS+=($col)
+          COLUMNS+=('(if (.domain != null) then (.domain.fault_domain.region.name) else "" end)')
           ;;
         domain)
           HEADERS+=($col)
@@ -931,6 +944,14 @@ tasks() {
         url)
           HEADERS+=(url)
           COLUMNS+=('"'$MESOS_GUI_URL'/#/'$MESOS_AGENT_NAME'/" + .slave_id + "/frameworks/" + .framework_id + "/executors/" + ((if .executor_id == "" then .id else .executor_id end) | @uri)')
+          ;;
+        zone)
+          HEADERS+=($col)
+          COLUMNS+=('(if ($slaves[.slave_id].domain != null) then ($slaves[.slave_id].domain.fault_domain.zone.name) else "" end)')
+          ;;
+        region)
+          HEADERS+=($col)
+          COLUMNS+=('(if ($slaves[.slave_id].domain != null) then ($slaves[.slave_id].domain.fault_domain.region.name) else "" end)')
           ;;
         domain)
           HEADERS+=($col)
