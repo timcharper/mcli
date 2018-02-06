@@ -429,6 +429,20 @@ executor-url() {
 }
 
 
+agent-curl() {
+  local AGENT_ID=$1
+  shift
+  local AGENT_HOSTNAME=$1
+  shift
+  local URI=$1
+  shift
+
+  if [ ! -z "$MESOS_AGENT_URL_PREFIX" ]; then
+    curl-with-auth -s -f -H "Content-Type: application/json" ${MESOS_AGENT_URL_PREFIX}/${AGENT_ID}${URI} "${@}"
+  else
+    curl-with-auth -s -f -H "Content-Type: application/json" ${MESOS_HTTP_PROTO}://${AGENT_HOSTNAME}:5051${URI} "${@}"
+  fi
+}
 
 sandbox() {
   declare -a OTHERARGS
@@ -468,8 +482,8 @@ sandbox() {
 
 
   ID="${OTHERARGS[0]}"
-  task "$ID" --no-color | jq '"'${MESOS_HTTP_PROTO}'://" + .host + ":5051/state"' -r | while read url; do
-    $MESOS_CURL_CMD -s "$url" | jq '[.frameworks, .completed_frameworks] | add | map([.executors, .completed_executors]) | flatten | map( { "directory": .directory, "tasks": ([.tasks, .queued_tasks, .completed_tasks] | add | map(select(.id == "'"${ID}"'"))) })[] | select(.tasks | length > 0) | .directory' -r | while read sandbox_path; do
+  task "$ID" --no-color | jq '.slave_id + " " + .hostname' -r | while read id_host; do
+    agent-curl $id_host /state | jq '[.frameworks, .completed_frameworks] | add | map([.executors, .completed_executors]) | flatten | map( { "directory": .directory, "tasks": ([.tasks, .queued_tasks, .completed_tasks] | add | map(select(.id == "'"${ID}"'"))) })[] | select(.tasks | length > 0) | .directory' -r | while read sandbox_path; do
       if $SHOW_URL; then
         eval "$(mesos-vars "$sandbox_path")"
         echo $MESOS_GUI_URL/#/$MESOS_AGENT_NAME/${AGENT_ID}/browse?path=$(echo $FULL_PATH | sed "s|/|%2f|g")
@@ -1001,19 +1015,22 @@ tasks() {
   fi
 }
 
-if [ -z "$cmd" ]; then
-  help
-  exit 1
+if [ $(basename "$0") != "bash" ]; then
+  if [ -z "$cmd" ]; then
+    help
+    exit 1
+  fi
+
+  case "$cmd" in
+    curl) mesos-curl "$@" ;;
+    ps|tasks) tasks "$@" ;;
+    frameworks) frameworks "$@" ;;
+    agents) agents "$@" ;;
+    executor-url) executor-url "$@" ;;
+    inspect|task) task "$@" ;;
+    sandbox) sandbox "$@" ;;
+    curl) mesos-curl "$@" ;;
+    *) echo "unrecognized command: $cmd"; help; exit 1 ;;
+  esac
 fi
 
-case "$cmd" in
-  curl) mesos-curl "$@" ;;
-  ps|tasks) tasks "$@" ;;
-  frameworks) frameworks "$@" ;;
-  agents) agents "$@" ;;
-  executor-url) executor-url "$@" ;;
-  inspect|task) task "$@" ;;
-  sandbox) sandbox "$@" ;;
-  curl) mesos-curl "$@" ;;
-  *) echo "unrecognized command: $cmd"; help; exit 1 ;;
-esac

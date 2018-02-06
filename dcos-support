@@ -4,6 +4,7 @@ target-dcos() {
   export MARATHON_MASTER_URL="$(dcos config show core.dcos_url)/marathon"
   export MESOS_CURL_CMD='curl -H Authorization:\ token='${AUTH_TOKEN}
   export MESOS_MASTER_URL="$(dcos config show core.dcos_url)/mesos"
+  export MESOS_AGENT_URL_PREFIX="$(dcos config show core.dcos_url)/agent"
 }
 
 auto-trust-cert() {
