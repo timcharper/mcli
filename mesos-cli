@@ -244,6 +244,23 @@ column list:
 EOF
 }
 
+agent-help() {
+  cat <<EOF
+Show the full JSON details for a single Mesos agent.
+
+usage: ${INVOCATION} <id>
+
+  Options:
+
+  --color         - Force color output. By default, color output is enabled if
+                    STDOUT is a terminal.
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
 task-help() {
   cat <<EOF
 Show the full JSON details for a mesos task. Paginates backwards by
@@ -350,7 +367,7 @@ agent() {
     shift
     case "$arg" in
       --help)
-        task-help
+        agent-help
         exit 0
         ;;
       --color)
@@ -361,7 +378,7 @@ agent() {
         ;;
       -*)
         echo "Unrecognized argument: $arg" 1>&2
-        task-help
+        agent-help
         exit 1
         ;;
       *)
@@ -372,7 +389,7 @@ agent() {
 
   if [ "${#OTHERARGS[@]}" -ne 1 ]; then
     echo "expected one argument specifying an agent id; got ${OTHERARGS[@]}"
-    task-help
+    agent-help
     exit 1
   fi
 
