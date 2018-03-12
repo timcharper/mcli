@@ -82,7 +82,7 @@ $ docker run --rm -it -v $(pwd):/bundle timcharper/mcli
 
 # inside of docker container
 bash-4.3# cd /bundle
-bash-4.3# diagnostic
+bash-4.3# target-bundle
 Master IP is 159.202.228.100
 Marathon port is 8443
 
@@ -93,3 +93,19 @@ task-2.f0b65f17-760f-11e7-a3c0-5276ce99eeb5  159.202.228.101  TASK_RUNNING  2017
 ```
 
 (note you can do the same with the osx/shell command, also)
+
+# Targeting a DCOS cluster
+
+If you have the dcos-cli configured to connect to your cluster, mesos-cli can piggy-back on top of this tool to authenticate itself and extract data over the publicly exposed admin-router.
+
+```
+$ target-dcos
+```
+
+If you are not using a trusted (by curl) cert, then you will either need to fix that, or turn off cert verification (not recommended):
+
+```
+$ auto-trust-cert
+```
+
+
