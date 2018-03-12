@@ -32,13 +32,14 @@ Usage: ${INVOCATION} <cmd> [<options...>]
 
 Commands:
 
+  - agent        : inspect a single agent
+  - agents       : list agents
   - curl         : curl helper for mesos; first arg URI, rest forwarded to curl.
   - executor-url : show the executor-url for a given task
-  - tasks        : list mesos tasks
-  - task         : inspect a mesos task
   - frameworks   : list frameworks
-  - agents       : list agents
   - sandbox      : show the sandbox for a given task
+  - task         : inspect a mesos task
+  - tasks        : list mesos tasks
 
 For help on commands, $0 <cmd> --help
 
