@@ -82,7 +82,7 @@ _comp_mesos_agents() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "default id hostname region zone domain port version active pid roles attributes cpus mem disk gpus ports used-cpus used-mem used-disk used-gpus reserved-cpus reserved-mem reserved-disk reserved-gpus registered" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default id hostname region zone domain port version active pid roles attributes cpus mem disk gpus ports used-cpus used-mem used-disk used-gpus reserved-cpus reserved-mem reserved-disk reserved-gpus unreserved-cpus unreserved-mem unreserved-disk unreserved-gpus registered" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"
@@ -142,6 +142,19 @@ _comp_mesos_sandbox() {
   esac
 }
 
+_comp_mesos_agent() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--u --url" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(mesos-cli agents -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
 _comp_mesos_task() {
   case "${cur}" in
     -*)
@@ -161,7 +174,7 @@ _comp_mesos() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl executor-url task agents frameworks tasks sandbox" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl executor-url task agent agents frameworks tasks sandbox" -- ${cur}) )
 
     return 0
   fi
@@ -171,6 +184,9 @@ _comp_mesos() {
   case "$cmd" in
     executor-url)
       _comp_mesos_executor_url
+      ;;
+    agent)
+      _comp_mesos_agent
       ;;
     inspect|task)
       _comp_mesos_task

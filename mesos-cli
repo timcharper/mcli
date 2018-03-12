@@ -98,33 +98,37 @@ usage: ${INVOCATION} [options...]
 
 column list:
 
-      default       - id hostname roles
-      id            - Agent id
-      hostname      - Agent hostname
-      domain        - Agent fault domain (region/zone)
-      port          - Port on which agent is listening (HTTP)
+      default         - id hostname roles
+      id              - Agent id
+      hostname        - Agent hostname
+      domain          - Agent fault domain (region/zone)
+      port            - Port on which agent is listening (HTTP)
       version
       active
       pid
-      roles         - Agent resource roles
-      attributes    - Configured agent attributes
-      cpus          - Total CPUs managed by agent
-      mem           - Total mem managed by agent (mb)
-      disk          - Total disk managed by agent (mb)
-      gpus          - Total GPUs managed by agent
-      ports         - Host port ranges managed by agent
-      used-cpus     - Total CPUs assigned to running tasks
-      used-mem      - Total memory assigned to running tasks
-      used-disk     - Total disk assigned to running tasks
-      used-gpus     - Total GPUs assigned to running tasks
-      reserved-cpus - Total reserved CPUs (used and unused)
-      reserved-mem  - Total reserved mem (used and unused)
-      reserved-disk - Total reserved disk (used and unused)
-      reserved-gpus - Total reserved GPUs (used and unused)
-      registered    - Time at which the agent was registered
-      domain        - Fault domain: region/zone
-      zone          - Fault domain: region
-      region        - Fault domain: zone
+      roles           - Agent resource roles
+      attributes      - Configured agent attributes
+      cpus            - Total CPUs managed by agent
+      mem             - Total mem managed by agent (mb)
+      disk            - Total disk managed by agent (mb)
+      gpus            - Total GPUs managed by agent
+      ports           - Host port ranges managed by agent
+      used-cpus       - Total CPUs assigned to running tasks
+      used-mem        - Total memory assigned to running tasks
+      used-disk       - Total disk assigned to running tasks
+      used-gpus       - Total GPUs assigned to running tasks
+      reserved-cpus   - Total reserved CPUs (used and unused)
+      reserved-mem    - Total reserved mem (used and unused)
+      reserved-disk   - Total reserved disk (used and unused)
+      reserved-gpus   - Total reserved GPUs (used and unused)
+      unreserved-cpus - Total unreserved CPUs (used and unused)
+      unreserved-mem  - Total unreserved mem (used and unused)
+      unreserved-disk - Total unreserved disk (used and unused)
+      unreserved-gpus - Total unreserved GPUs (used and unused)
+      registered      - Time at which the agent was registered
+      domain          - Fault domain: region/zone
+      zone            - Fault domain: region
+      region          - Fault domain: zone
 
 EOF
 }
@@ -329,6 +333,53 @@ join-str() {
     OUTPUT+="${!n}"
   done
   echo -n "$OUTPUT"
+}
+
+agent() {
+  declare -a OTHERARGS
+  local COLOR_OUTPUT=""
+  if [ -t 1 ]; then
+    COLOR_OUTPUT="--color-output"
+  else
+    COLOR_OUTPUT="--monochrome-output"
+  fi
+
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        task-help
+        exit 0
+        ;;
+      --color)
+        COLOR_OUTPUT="--color-output"
+        ;;
+      --no-color)
+        COLOR_OUTPUT="--monochrome-output"
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        task-help
+        exit 1
+        ;;
+      *)
+        OTHERARGS+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#OTHERARGS[@]}" -ne 1 ]; then
+    echo "expected one argument specifying an agent id; got ${OTHERARGS[@]}"
+    task-help
+    exit 1
+  fi
+
+  local agent_id="${OTHERARGS[0]}"
+
+  mesos-curl "/slaves" | jq $COLOR_OUTPUT '.slaves[] | select(.id == "'"${agent_id}"'")'
+  return 1
 }
 
 task() {
@@ -587,6 +638,10 @@ agents() {
         domain)
           HEADERS+=($col)
           COLUMNS+=('(if (.domain != null) then (.domain.fault_domain.region.name + "/" + .domain.fault_domain.zone.name) else "" end)')
+          ;;
+        unreserved-disk|unreserved-mem|unreserved-gpus|unreserved-cpus)
+          HEADERS+=($col)
+          COLUMNS+=(.unreserved_resources.${col:11})
           ;;
         reserved-disk|reserved-mem|reserved-gpus|reserved-cpus)
           HEADERS+=($col)
@@ -1026,6 +1081,7 @@ if [ $(basename "$0") != "bash" ]; then
     ps|tasks) tasks "$@" ;;
     frameworks) frameworks "$@" ;;
     agents) agents "$@" ;;
+    agent) agent "$@" ;;
     executor-url) executor-url "$@" ;;
     inspect|task) task "$@" ;;
     sandbox) sandbox "$@" ;;
