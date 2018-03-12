@@ -32,3 +32,9 @@ target-bundle() {
   export MESOS_MASTER_URL=http://${MESOS_MASTER_IP}:5050
   export MARATHON_MASTER_URL=http://${MARATHON_LEADER}
 }
+
+target-local-permissive-cluster() {
+  export MESOS_MASTER_URL=http://leader.mesos:5050
+  export MARATHON_MASTER_URL=http://marathon.mesos:8080
+
+}
