@@ -29,11 +29,12 @@ Usage: ${INVOCATION} <cmd> [<options...>]
 Commands:
 
   - apps         : list marathon apps
-  - pods         : list marathon pods
   - app          : get info about a specific app
   - tasks        : list marathon tasks
   - task         : show info about a specific Marathon task
   - curl         : curl Marathon
+  - pod          : get info about a specific pod
+  - pods         : list marathon pods
   - restart-app  : Restart an app
   - delete-app   : Delete an app
 
@@ -89,6 +90,23 @@ usage: ${INVOCATION} <id>
 
   --force         - Force the app to be restarted if it is currently locked by
                     some other deployment
+
+  --color         - Force color output. By default, color output is enabled if
+                    STDOUT is a terminal.
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
+pod-help() {
+  cat <<EOF
+Show the full JSON details for a Marathon pod.
+
+usage: ${INVOCATION} <id>
+
+  Options:
 
   --color         - Force color output. By default, color output is enabled if
                     STDOUT is a terminal.
@@ -270,6 +288,52 @@ delete-app() {
   marathon-curl "/v2/apps${app_id}${params}" -X DELETE | jq $color_output '.'
 }
 
+pod() {
+  declare -a otherargs
+  local color_output=""
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        inspect-help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        pod-help
+        exit 1
+        ;;
+      *)
+        otherargs+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#otherargs[@]}" -ne 1 ]; then
+    echo "expected one argument specifying an pod id; got ${otherargs[@]}"
+    pod-help
+    exit 1
+  fi
+
+  pod_id="${otherargs[0]}"
+
+  marathon-curl "/v2/pods${pod_id}" | jq $color_output '.'
+}
+
 app() {
   declare -a otherargs
   local color_output=""
@@ -414,6 +478,58 @@ column list:
       deploymentCount      - # of pending deployments associated with this app
       hcCount              - # of health checks assigned to app
       hcType               - List of health check types
+
+EOF
+}
+
+pods-help() {
+  cat <<EOF
+List marathon pods
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default           - Group: id status version instances
+
+      id                - App id
+      lastChanged       - Last time pod status was changed
+      lastUpdated       - Last time pod status was updated (may not have changed)
+      status            - State of pod: DEGRADED, STABLE, or TERMINAL
+      statusSince       - Last time status of pod was modified
+      instances         - # of pod instances
+      version           - Pod specification version
+      instanceCount     - # of instances in pod
+      containerCount    - # of containers in pod
+      instanceStatuses  - Status of instances in pod
+      imageKinds        - Container image kinds
+      imageIds          - Image ids
+      volumeMountCounts - Count of volume mounts
+      resources         - Group: cpus mem disk gpus
+      cpus              - # of cpus assigned to each container
+      mem               - amount of mem assigned to each container
+      disk              - amount of disk assigned to each container
+      gpus              - # of gpus assigned to each container
+      totalResources    - Group: totalCpus totalMem totalDisk totalGpus
+      totalCpus         - # of cpus assigned to all containers
+      totalMem          - amount of mem assigned to all containers
+      totalDisk         - amount of disk assigned to all containers
+      totalGpus         - # of gpus assigned to all containers
+
 
 EOF
 }
@@ -789,9 +905,13 @@ pods() {
       --no-align)
         NO_ALIGN=true
         ;;
+      --help)
+        pods-help
+        exit 1
+        ;;
       -*)
         echo "Unrecognized option $arg" 1>&2
-        apps-help
+        pods-help
         exit 1
         ;;
       *)
@@ -806,54 +926,63 @@ pods() {
     for col in "$@"; do
       case "$col" in
         default)
-          interprete-cols id version instances
+          interprete-cols id status version instances
           ;;
-        taskCounts)
-          interprete-cols tasksRunning tasksStaged tasksHealthy tasksUnhealthy
-          ;;
-        id|cmd|cpus|mem|disk|gpus|executor|backoffSeconds|backoffFactor|maxLaunchDelaySeconds|version|residency|killSelection|requirePorts|tasksRunning|tasksStaged|tasksHealthy|tasksUnhealthy|instances)
+        id|lastUpdated|lastChanged|status|statusSince)
           HEADERS+=($col)
           COLUMNS+=(.$col)
           ;;
-        ports)
-          HEADERS+=(ports)
-          COLUMNS+=('((.ports[0:3] | map(tostring) | join(",")) + (if ((.ports | length) <= 3) then "" else ",..." end))')
-          ;;
-        container-type)
-          HEADERS+=(container-type)
-          COLUMNS+=(.container.type)
-          ;;
-        docker-network-type)
-          HEADERS+=(docker-network-type)
-          COLUMNS+=(.container.docker.network)
-          ;;
-        volume-count)
-          HEADERS+=('# volumes')
-          COLUMNS+=('(.container.volumes | length)')
-          ;;
-        docker-image)
-          HEADERS+=(docker-image)
-          COLUMNS+=(.container.docker.image)
-          ;;
-        lastScalingAt)
+        instances)
           HEADERS+=($col)
-          COLUMNS+=(.versionInfo.lastScalingAt)
+          COLUMNS+=(.spec.scaling.instances)
           ;;
-        lastConfigChangeAt)
+        version)
           HEADERS+=($col)
-          COLUMNS+=(.versionInfo.lastConfigChangeAt)
+          COLUMNS+=(.spec.$col)
           ;;
-        deploymentCount)
-          HEADERS+=('# deployments')
-          COLUMNS+=('(.deployments | length)')
+        instanceCount)
+          HEADERS+=($col)
+          COLUMNS+=('(.instances | length)')
           ;;
-        hcCount)
-          HEADERS+=('# healthChecks')
-          COLUMNS+=('(.healthChecks | length)')
+        containerCount)
+          HEADERS+=($col)
+          COLUMNS+=('(.spec.containers | length)')
           ;;
-        hcType)
-          HEADERS+=('healthCheckType')
-          COLUMNS+=('(.healthChecks | map(.protocol) | join(","))')
+        instanceStatuses)
+          HEADERS+=($col)
+          COLUMNS+=('(.instances | map(.status) | join(","))')
+          ;;
+        imageKinds)
+          HEADERS+=($col)
+          COLUMNS+=('(.spec.containers | map(.image.kind) | join(","))')
+          ;;
+        imageIds)
+          HEADERS+=($col)
+          COLUMNS+=('(.spec.containers | map(.image.id) | unique)')
+          ;;
+
+        volumeMountCounts)
+          HEADERS+=($col)
+          COLUMNS+=('(.spec.containers | map(.volumeMounts | length | tostring) | join(","))')
+          ;;
+
+        resources)
+          interprete-cols cpus mem disk gpus
+          ;;
+        totalResources)
+          interprete-cols totalCpus totalMem totalDisk totalGpus
+          ;;
+
+        cpus|mem|disk|gpus)
+          HEADERS+=($col)
+          COLUMNS+=('(.spec.containers | map(.resources.'$col' | tostring) | join(","))')
+          ;;
+
+        totalCpus|totalDisk|totalMem|totalGpus)
+          resource=${col:5}
+          resource="${resource,,}"
+          HEADERS+=($col)
+          COLUMNS+=('(.spec.containers | map(.resources.'$resource') | add)')
           ;;
 
         *)
@@ -887,7 +1016,7 @@ pods() {
       SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
     fi
 
-    marathon-curl "/v2/pods" | jq '.apps '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
+    marathon-curl "/v2/pods" | jq '. '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
   }
 
   if $NO_ALIGN; then
@@ -906,6 +1035,7 @@ case "$cmd" in
   apps) apps "$@" ;;
   app) app "$@" ;;
   pods) pods "$@" ;;
+  pod) pod "$@" ;;
   tasks) tasks "$@" ;;
   task) task "$@" ;;
   curl) marathon-curl "$@" ;;

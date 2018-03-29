@@ -8,18 +8,37 @@ cat-maybe-gzip() {
   fi
 }
 
+path-filename() {
+  local PATH_FILENAME=$(echo "$1" | cut -f 1 -d ? | sed 's|/|_|g')
+  echo ${URL_HOSTNAME}_master/${URL_PORT}${BUNDLE_PORT_DELIMITER}${PATH_FILENAME}.json
+}
+
 cat-path() {
   local URL_PATH="$1"
-  if (echo "$URL_PATH" | egrep -q '^v2/apps/.+'); then
-    # since we're working with a diagnostic bundle, we're going to emulate this endpoint by searching through all of the apps and filtering down to the selected one
-    APP_ID="${URL_PATH:7}"
-    cat-path "v2/apps" | jq -M -c '.apps[] | select(.id == "'"$APP_ID"'")'
-  else
-    PATH_FILENAME=$(echo "$URL_PATH" | cut -f 1 -d ? | sed 's|/|_|g')
-    PREFIX=${URL_HOSTNAME}_master/${URL_PORT}${BUNDLE_PORT_DELIMITER}${PATH_FILENAME}.json
-
-    cat-maybe-gzip "$PREFIX"
-  fi
+  case "$URL_PATH" in
+    v2/apps/?*)
+      # since we're working with a diagnostic bundle, we're going to emulate this endpoint by searching through all of the apps and filtering down to the selected one
+      APP_ID="${URL_PATH:7}"
+      cat-path "v2/apps" | jq -M -c '.apps[] | select(.id == "'"$APP_ID"'")'
+      ;;
+    v2/pods)
+      POD_FILE="$(path-filename "$URL_PATH")"
+      EXISTING_FILE=$(find "$POD_FILE"* 2> /dev/null | head -n 1)
+      if [ ! -z "$EXISTING_FILE" ]; then
+        cat-maybe-gzip "$EXISTING_FILE"
+      else
+        # diagnostic bundle did not contain pods; reconstruct pods from the /v2/groups endpoint.
+        cat-maybe-gzip "$(path-filename v2/groups)" | jq -c -M '[recurse(.groups[]) | .pods[]]'
+      fi
+      ;;
+    v2/pods/?*)
+      POD_ID="${URL_PATH:7}"
+      cat-path "v2/pods" | jq -M -c '.[] | select (.id == "'"$POD_ID"'")'
+      ;;
+    *)
+      cat-maybe-gzip "$(path-filename "$URL_PATH")"
+      ;;
+  esac
 }
 
 while [[ $# -gt 0 ]]; do

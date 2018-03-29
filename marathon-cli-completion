@@ -16,7 +16,7 @@ _comp_marathon_join-str() {
 _comp_marathon_curl() {
   case "${prev}" in
     curl)
-      COMPREPLY+=( $(compgen -W "/metrics /v2/apps /v2/tasks /v2/deployments /v2/eventSubscriptions /v2/groups /v2/info /v2/leader /v2/queue /v2/tasks" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "/metrics /v2/apps /v2/tasks /v2/deployments /v2/eventSubscriptions /v2/groups /v2/info /v2/leader /v2/queue /v2/tasks /v2/pods" -- "${cur}"))
       return 0
       ;;
   esac
@@ -97,6 +97,55 @@ _comp_marathon_delete_app() {
   esac
 }
 
+_comp_marathon_pod() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli pods -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon_pods() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--all --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
+      return 0
+      ;;
+  esac
+
+  case "${prev}" in
+    -c|--columns|-s|--sort)
+      local cols curcol others n
+      cols=($(echo "$cur" | tr ',' ' '))
+      if [ ! ${#cols[@]} = 0 ]; then
+        if [ "${cur:${#cur}-1}" = "," ]; then
+          cols+=("")
+        fi
+
+        curcol=${cols[${#cols[@]}-1]}
+        others=$(_comp_marathon_join-str , "${cols[@]:0:${#cols[@]}-1}")
+      else
+        others=""
+        curcol=""
+      fi
+
+      COMPREPLY+=( $(compgen -W "default id lastChanged lastUpdated status statusSince instances version instanceCount containerCount instanceStatuses imageKinds imageIds volumeMountCounts resources cpus mem disk gpus totalResources totalCpus totalMem totalDisk totalGpus" -- "${curcol}"))
+      if [ ! -z "$others" ]; then
+        for ((n=0; n<${#COMPREPLY[@]}; n++)); do
+          COMPREPLY[$n]="${others},${COMPREPLY[n]}"
+        done
+      fi
+
+      return 0
+      ;;
+  esac
+}
+
 _comp_marathon_app() {
   case "${cur}" in
     -*)
@@ -152,7 +201,7 @@ _comp_marathon() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl tasks task apps app delete-app restart-app" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl tasks task apps app delete-app restart-app pod pods" -- ${cur}) )
 
     return 0
   fi
@@ -174,6 +223,12 @@ _comp_marathon() {
       ;;
     delete-app)
       _comp_marathon_delete_app
+      ;;
+    pod)
+      _comp_marathon_pod
+      ;;
+    pods)
+      _comp_marathon_pods
       ;;
     app)
       _comp_marathon_app
