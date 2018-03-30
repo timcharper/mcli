@@ -22,7 +22,7 @@ target-bundle() {
   fi
   local MARATHON_LEADER_FILE=$(find *_master/*v2_leader.json.gz | head -n 1)
   export BUNDLE_PORT_DELIMITER=$(basename $MARATHON_LEADER_FILE | sed 's/[0-9]//g' | head -c 1)
-  local MARATHON_LEADER_IP=$(gzcat "$MARATHON_LEADER_FILE" | jq .leader -r | cut -f 1 -d ":")
+  local MARATHON_LEADER_IP=$(gzip -dc "$MARATHON_LEADER_FILE" | jq .leader -r | cut -f 1 -d ":")
   local MARATHON_LEADER_PORT=$(basename $MARATHON_LEADER_FILE | cut -f 1 -d "$BUNDLE_PORT_DELIMITER")
   local MARATHON_LEADER="$MARATHON_LEADER_IP:$MARATHON_LEADER_PORT"
   echo "Mesos Master IP is $MESOS_MASTER_IP"
