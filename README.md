@@ -16,7 +16,7 @@ By default, it assumes Marathon is running at `http://marathon.mesos:8080`, and 
 
 - `mesos-cli` - A tool for reading and interpreting Mesos HTTP responses (aliased `mcli`)
 - `marathon-cli` - A tool for reading and interpreting Marathon HTTP responses
-- `dicker` - A Mesos/Marathon enriched docker task inspection tool with a silly name (aliased `dr`)
+- `md` - A Mesos/Marathon enriched docker task inspection tool with a silly name (aliased `dr`)
 
 # Configuration
 

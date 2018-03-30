@@ -483,7 +483,7 @@ commands:
       url : Output the executor URL.
      join : Short-hand process to open a shell for a running docker container.
 
-For help on commands, dicker [cmd] --help
+For help on commands, md [cmd] --help
 
 EOF
 }

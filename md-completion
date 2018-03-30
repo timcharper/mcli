@@ -10,12 +10,12 @@ _strip_compreply_colons() {
   fi
 }
 
-_comp_dicker_arg_image() {
+_comp_md_arg_image() {
   COMPREPLY+=( $(compgen -W "$(docker images --format '{{ if not (eq .Tag "<none>")  }}{{.Repository}}:{{.Tag}}{{end }} {{.Repository}}:{{.ID}} {{.ID}}')" -- ${cur}) )
   _strip_compreply_colons "${cur}"
 }
 
-_comp_dicker_logs() {
+_comp_md_logs() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--follow -f --glob -g --line -n --help" -- "${cur}"))
@@ -26,7 +26,7 @@ _comp_dicker_logs() {
   esac
 }
 
-_comp_dicker_join-str() {
+_comp_md_join-str() {
   delimiter="$1"
   shift
   OUTPUT=""
@@ -39,7 +39,7 @@ _comp_dicker_join-str() {
   echo -n "$OUTPUT"
 }
 
-_comp_dicker_ps() {
+_comp_md_ps() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--all -a --filter -f --image -i --columns -c --no-header --no-align --help" -- "${cur}"))
@@ -49,7 +49,7 @@ _comp_dicker_ps() {
 
   case "${prev}" in
     -i|--image)
-      _comp_dicker_arg_image
+      _comp_md_arg_image
       return 0
       ;;
     -c|--columns)
@@ -61,7 +61,7 @@ _comp_dicker_ps() {
         fi
 
         curcol=${cols[${#cols[@]}-1]}
-        others=$(_comp_dicker_join-str , "${cols[@]:0:${#cols[@]}-1}")
+        others=$(_comp_md_join-str , "${cols[@]:0:${#cols[@]}-1}")
       else
         others=""
         curcol=""
@@ -79,7 +79,7 @@ _comp_dicker_ps() {
   esac
 }
 
-_comp_dicker_join() {
+_comp_md_join() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help" -- "${cur}"))
@@ -90,7 +90,7 @@ _comp_dicker_join() {
   esac
 }
 
-_comp_dicker_url() {
+_comp_md_url() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help" -- "${cur}"))
@@ -101,7 +101,7 @@ _comp_dicker_url() {
   esac
 }
 
-_comp_dicker_sandbox() {
+_comp_md_sandbox() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "-u --url --help" -- "${cur}"))
@@ -113,7 +113,7 @@ _comp_dicker_sandbox() {
 }
 
 
-_comp_dicker() {
+_comp_md() {
   local cur prev words cword
   _init_completion -n : || return
   COMPREPLY=()
@@ -127,19 +127,19 @@ _comp_dicker() {
 
   case "$cmd" in
     logs)
-      _comp_dicker_logs
+      _comp_md_logs
       ;;
     ps)
-      _comp_dicker_ps
+      _comp_md_ps
       ;;
     join)
-      _comp_dicker_join
+      _comp_md_join
       ;;
     url)
-      _comp_dicker_url
+      _comp_md_url
       ;;
     sandbox)
-      _comp_dicker_sandbox
+      _comp_md_sandbox
       ;;
     *)
       return 0
@@ -147,5 +147,4 @@ _comp_dicker() {
   esac
 
 }
-complete  -o nospace -o bashdefault -F _comp_dicker dicker
-complete  -o nospace -o bashdefault -F _comp_dicker dr
+complete  -o nospace -o bashdefault -F _comp_md md

@@ -529,7 +529,7 @@ column list:
       totalMem          - amount of mem assigned to all containers
       totalDisk         - amount of disk assigned to all containers
       totalGpus         - # of gpus assigned to all containers
-
+      
 
 EOF
 }
@@ -960,7 +960,7 @@ pods() {
           HEADERS+=($col)
           COLUMNS+=('(.spec.containers | map(.image.id) | unique)')
           ;;
-
+          
         volumeMountCounts)
           HEADERS+=($col)
           COLUMNS+=('(.spec.containers | map(.volumeMounts | length | tostring) | join(","))')
@@ -972,7 +972,7 @@ pods() {
         totalResources)
           interprete-cols totalCpus totalMem totalDisk totalGpus
           ;;
-
+          
         cpus|mem|disk|gpus)
           HEADERS+=($col)
           COLUMNS+=('(.spec.containers | map(.resources.'$col' | tostring) | join(","))')
