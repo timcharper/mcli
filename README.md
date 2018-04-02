@@ -78,7 +78,7 @@ To use with a diagnostic bundle:
 $ unzip bundle-xxxxx.zip
 Unzipping ...
 ..
-$ docker run --rm -it -v $(pwd):/bundle timcharper/mcli
+$ docker run --rm -it -v "$(pwd)":/bundle timcharper/mcli
 
 # inside of docker container
 bash-4.3# cd /bundle
