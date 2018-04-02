@@ -4,7 +4,7 @@ cat-maybe-gzip() {
   if [ -f "$1" ]; then
     cat $1
   else
-    cat ${1}.gz | gunzip
+    gunzip -c ${1}.gz
   fi
 }
 
