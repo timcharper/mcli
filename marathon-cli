@@ -774,7 +774,7 @@ apps() {
         ;;
       *)
         echo "Unexpected argument: $arg" 1>&2
-        ps-help
+        apps-help
         exit 1
         ;;
     esac
@@ -795,7 +795,8 @@ apps() {
           ;;
         ports)
           HEADERS+=(ports)
-          COLUMNS+=('((.ports[0:3] | map(tostring) | join(",")) + (if ((.ports | length) <= 3) then "" else ",..." end))')
+          COLUMNS+=('(.ports // (.portDefinitions // [] | map(.port)) as $ports | ($ports[0:3] | map(tostring) | join(",")) + (if (($ports | length) <= 3) then "" else ",..." end))')
+
           ;;
         container-type)
           HEADERS+=(container-type)
@@ -916,7 +917,7 @@ pods() {
         ;;
       *)
         echo "Unexpected argument: $arg" 1>&2
-        ps-help
+        pods-help
         exit 1
         ;;
     esac
