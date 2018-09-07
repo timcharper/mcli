@@ -6,3 +6,4 @@ source /usr/local/share/dcos-support
 
 alias dr=md
 alias mcli=mesos-cli
+alias mar=marathon-cli

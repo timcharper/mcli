@@ -5,3 +5,4 @@ source $MCLIPATH/mesos-cli-completion
 source $MCLIPATH/marathon-cli-completion
 source $MCLIPATH/dcos-support
 alias mcli=mesos-cli
+alias mar=marathon-cli

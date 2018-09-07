@@ -243,3 +243,4 @@ _comp_marathon() {
 
 }
 complete  -o nospace -o bashdefault -F _comp_marathon marathon-cli
+complete  -o nospace -o bashdefault -F _comp_marathon mar
