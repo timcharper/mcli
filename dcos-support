@@ -6,18 +6,48 @@ cat-maybe-gunzip() {
   fi
 }
 
+dcos-curl() {
+  local uri="$1"
+  shift
+  curl -H "Authorization: token=${DCOS_AUTH_TOKEN}" ${DCOS_URL}${uri} "$@"
+}
+
 target-dcos() {
-  export AUTH_TOKEN="$(dcos config show core.dcos_acs_token)"
-  export MARATHON_CURL_CMD='curl -H Authorization:\ token='${AUTH_TOKEN}
-  export MARATHON_MASTER_URL="$(dcos config show core.dcos_url)/marathon"
-  export MESOS_CURL_CMD='curl -H Authorization:\ token='${AUTH_TOKEN}
-  export MESOS_MASTER_URL="$(dcos config show core.dcos_url)/mesos"
-  export MESOS_AGENT_URL_PREFIX="$(dcos config show core.dcos_url)/agent"
+  export DCOS_AUTH_TOKEN="$(dcos config show core.dcos_acs_token)"
+  export DCOS_URL="$(dcos config show core.dcos_url)"
+  export MARATHON_CURL_CMD='curl -H Authorization:\ token='${DCOS_AUTH_TOKEN}
+  export MARATHON_MASTER_URL="${DCOS_URL}/marathon"
+  export MESOS_CURL_CMD='curl -H Authorization:\ token='${DCOS_AUTH_TOKEN}
+  export MESOS_MASTER_URL="${DCOS_URL}/mesos"
+  export MESOS_AGENT_URL_PREFIX="${DCOS_URL}/agent"
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -a|--auto-trust)
+        auto-trust-cert
+        ;;
+      *)
+        echo "Unknown arg: ${arg}"
+        return 1
+        ;;
+    esac
+  done
 }
 
 auto-trust-cert() {
   export MESOS_CURL_CMD="${MESOS_CURL_CMD:-curl} -k"
   export MARATHON_CURL_CMD="${MESOS_CURL_CMD:-curl} -k"
+}
+
+bundle-infer-marathon-leader-ip-port() {
+  local MARATHON_LEADER_FILE
+  MARATHON_LEADER_FILE=$(find *_master/*v2_leader.json* | head -n 1) || true
+  if [ -z "$MARATHON_LEADER_FILE" ]; then
+    MARATHON_LEADER_FILE=$(find *_master/*v2_info.json* | head -n 1)
+  fi
+  cat-maybe-gunzip "$MARATHON_LEADER_FILE" | jq .leader -r
 }
 
 target-bundle() {
@@ -28,11 +58,10 @@ target-bundle() {
     echo
     return 1
   fi
-  local MARATHON_LEADER_FILE=$(find *_master/*v2_leader.json* | head -n 1)
-  export BUNDLE_PORT_DELIMITER=$(basename $MARATHON_LEADER_FILE | sed 's/[0-9]//g' | head -c 1)
-  local MARATHON_LEADER_IP=$(cat-maybe-gunzip "$MARATHON_LEADER_FILE" | jq .leader -r | cut -f 1 -d ":")
-  local MARATHON_LEADER_PORT=$(basename $MARATHON_LEADER_FILE | cut -f 1 -d "$BUNDLE_PORT_DELIMITER")
-  local MARATHON_LEADER="$MARATHON_LEADER_IP:$MARATHON_LEADER_PORT"
+  local MARATHON_FILE=$(find *_master/*v2_*.json* | head -n 1)
+  export BUNDLE_PORT_DELIMITER=$(basename $MARATHON_FILE | sed 's/[0-9]//g' | head -c 1)
+  export BUNDLE_PORT_DELIMITER=-
+  local MARATHON_LEADER="$(bundle-infer-marathon-leader-ip-port)"
   echo "Mesos Master IP is $MESOS_MASTER_IP"
   echo "Marathon leader is $MARATHON_LEADER"
   export MESOS_CURL_CMD=diagnostic-curl-mesos
