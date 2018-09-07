@@ -242,6 +242,8 @@ column list:
       domain       - Agent fault domain: region/zone
       zone         - Agent fault domain: region
       region       - Agent fault domain: zone
+      docker-image - Docker image, if applicable
+
 EOF
 }
 
@@ -1043,6 +1045,10 @@ tasks() {
         domain)
           HEADERS+=($col)
           COLUMNS+=('(if ($slaves[.slave_id].domain != null) then ($slaves[.slave_id].domain.fault_domain.region.name + "/" + $slaves[.slave_id].domain.fault_domain.zone.name) else "" end)')
+          ;;
+        docker-image)
+          HEADERS+=($col)
+          COLUMNS+=('(.container // {} | .docker // {} | .image)')
           ;;
         *)
           echo "Unknown column: $col" 1>&2
