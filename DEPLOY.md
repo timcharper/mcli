@@ -1,4 +1,4 @@
-VERSION=0.6
+source VERSION
 git tag v$VERSION
 git push origin v$VERSION
 docker build . -t timcharper/mcli:$VERSION 
