@@ -163,6 +163,7 @@ column list:
       h,hostname         - Hostname on which the framework is running
       p,pid              - Mesos PID
       n,name             - Framework name
+      role               - Framework role
       offered-disk       - Amount of disk offered to the framework
       offered-mem        - " mem
       offered-gpus       - " gpus
@@ -769,9 +770,9 @@ frameworks() {
         tasks-statuses)
           interprete-cols tasks-staging tasks-starting tasks-running tasks-killing tasks-finished tasks-killed tasks-failed tasks-lost tasks-error tasks-unreachable
           ;;
-        id)
-          HEADERS+=(id)
-          COLUMNS+=(.id)
+        id|role|active)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
           ;;
         h|hostname)
           HEADERS+=(hostname)
@@ -821,10 +822,6 @@ frameworks() {
           status=${col:6}
           HEADERS+=("# ${status}")
           COLUMNS+=(".TASK_${status^^}")
-          ;;
-        active)
-          HEADERS+=(active)
-          COLUMNS+=(.active)
           ;;
         ui)
           HEADERS+=(ui)
