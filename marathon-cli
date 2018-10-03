@@ -34,7 +34,8 @@ Commands:
   - task         : show info about a specific Marathon task
   - curl         : curl Marathon
   - pod          : get info about a specific pod
-  - pods         : list marathon pods
+  - pods         : list Marathon pods
+  - queue        : list Marathon pending deployments
   - restart-app  : Restart an app
   - delete-app   : Delete an app
 
@@ -422,6 +423,52 @@ EOF
 }
 
 
+
+queue-help() {
+  cat <<EOF
+List current Marathon deployment queue
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default      - Group: id count since delay processedOffersCount unusedOffersCount lastUsedOfferAt
+      rejections   - Group: UnfulfilledRole UnfulfilledConstraint NoCorrespondingReservationFound AgentMaintenance InsufficientCpus InsufficientMemory InsufficientDisk InsufficientGpus InsufficientPorts DeclinedScarceResources
+
+      id                   - Deployment app id
+      count                - Number of instances left to launch
+      processedOffersCount - Number of offers processed so far
+      unusedOffersCount    - Number of offers received but not used
+      lastUsedOfferAt      - Date of the last used offer
+      since                - Time since when the deployment has been started
+      overdue              - If true, deployment is backed off
+      delay                - Number of seconds waiting until next launch attempt. If non-null, then deployment is delayed.
+      UnfulfilledRole                 - Number of offers declined with this reason
+      UnfulfilledConstraint           - "
+      NoCorrespondingReservationFound - "
+      AgentMaintenance                - "
+      InsufficientCpus                - "
+      InsufficientMemory              - "
+      InsufficientDisk                - "
+      InsufficientGpus                - "
+      InsufficientPorts               - "
+      DeclinedScarceResources         - "
+EOF
+}
 
 apps-help() {
   cat <<EOF
@@ -876,6 +923,123 @@ apps() {
   fi
 }
 
+queue() {
+  declare -a OTHERARGS
+  declare -a COLUMNS
+  declare -a HEADERS
+  declare -a SELECTS
+
+  COLUMN_LIST="default"
+  NO_HEADER=false
+  NO_ALIGN=false
+  SORT_COLS=id
+
+  ALIGN_CMD=$'| column -t -s "\t"'
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -s|--sort)
+        SORT_COLS=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        apps-help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        apps-help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "$@"; do
+      case "$col" in
+        default)
+          interprete-cols id count since delay processedOffersCount unusedOffersCount lastUsedOfferAt
+          ;;
+        id)
+          HEADERS+=($col)
+          COLUMNS+=(.app.id)
+          ;;
+        processedOffersCount|unusedOffersCount|lastUsedOfferAt)
+          HEADERS+=($col)
+          COLUMNS+=(.processedOffersSummary.$col)
+          ;;
+        count|since)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
+          ;;
+        overdue)
+          HEADERS+=($col)
+          COLUMNS+=("((.delay // {}).overdue)")
+          ;;
+        delay)
+          HEADERS+=($col)
+          COLUMNS+=("((.delay // {}).timeLeftSeconds)")
+          ;;
+        rejections)
+          interprete-cols UnfulfilledRole UnfulfilledConstraint NoCorrespondingReservationFound AgentMaintenance InsufficientCpus InsufficientMemory InsufficientDisk InsufficientGpus InsufficientPorts DeclinedScarceResources
+          ;;
+        UnfulfilledRole|UnfulfilledConstraint|NoCorrespondingReservationFound|AgentMaintenance|InsufficientCpus|InsufficientMemory|InsufficientDisk|InsufficientGpus|InsufficientPorts|DeclinedScarceResources)
+          HEADERS+=($col)
+          COLUMNS+=("(.processedOffersSummary.rejectSummaryLastOffers | map(select(.reason  == \"$col\")) | map(.declined)[0])")
+          ;;
+        *)
+          echo "Unknown column: $col" 1>&2
+          queue-help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  # hack: hijack interprete-cols to get the column expression
+  interprete-cols $SORT_COLS
+  SORT_EXPS=("${COLUMNS[@]}")
+  COLUMNS=()
+  HEADERS=()
+  interprete-cols $COLUMN_LIST
+
+  output-it() {
+    if ! $NO_HEADER; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+
+    SELECT_EXP=""
+    for expr in "${SELECTS[@]}"; do
+      SELECT_EXP+="| ${expr}"
+    done
+
+    if [ "${#SORT_EXPS[@]}" -ne 0 ]; then
+      SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
+    fi
+
+    marathon-curl "/v2/queue" | jq '.queue '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
+  }
+
+  if $NO_ALIGN; then
+    output-it
+  else
+    output-it | column -t -s $'\t'
+  fi
+}
+
 pods() {
   declare -a OTHERARGS
   declare -a COLUMNS
@@ -1033,6 +1197,7 @@ if [ -z "$cmd" ]; then
 fi
 
 case "$cmd" in
+  queue) queue "$@" ;;
   apps) apps "$@" ;;
   app) app "$@" ;;
   pods) pods "$@" ;;
