@@ -997,7 +997,7 @@ queue() {
           ;;
         UnfulfilledRole|UnfulfilledConstraint|NoCorrespondingReservationFound|AgentMaintenance|InsufficientCpus|InsufficientMemory|InsufficientDisk|InsufficientGpus|InsufficientPorts|DeclinedScarceResources)
           HEADERS+=($col)
-          COLUMNS+=("(.processedOffersSummary.rejectSummaryLastOffers | map(select(.reason  == \"$col\")) | map(.declined)[0])")
+          COLUMNS+=("(.processedOffersSummary.rejectSummaryLastOffers | map(select(.reason  == \"$col\")) | map((.declined | tostring // \"\") + \" / \" + (.processed | tostring // \"\"))[0])")
           ;;
         *)
           echo "Unknown column: $col" 1>&2
