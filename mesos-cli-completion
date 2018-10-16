@@ -119,7 +119,7 @@ _comp_mesos_frameworks() {
         curcol=""
       fi
 
-      COMPREPLY+=( $(compgen -W "default tasks-statuses id hostname pid name offered-disk offered-mem offered-gpus offered-cpus used-disk used-mem used-gpus used-cpus tasks-staging tasks-starting tasks-running tasks-killing tasks-finished tasks-killed tasks-failed tasks-lost tasks-error tasks-unreachable active ui capabilities registered unregistered failover_timeout role" -- "${curcol}"))
+      COMPREPLY+=( $(compgen -W "default tasks-statuses id hostname pid name offered-disk offered-mem offered-gpus offered-cpus used-disk used-mem used-gpus used-cpus tasks-staging tasks-starting tasks-running tasks-killing tasks-finished tasks-killed tasks-failed tasks-lost tasks-error tasks-unreachable active web_ui capabilities registered unregistered failover_timeout role recovered user connected principal" -- "${curcol}"))
       if [ ! -z "$others" ]; then
         for ((n=0; n<${#COMPREPLY[@]}; n++)); do
           COMPREPLY[$n]="${others},${COMPREPLY[n]}"

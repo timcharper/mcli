@@ -163,6 +163,7 @@ column list:
       h,hostname         - Hostname on which the framework is running
       p,pid              - Mesos PID
       n,name             - Framework name
+      user               - User as which the framework is registered
       role               - Framework role
       offered-disk       - Amount of disk offered to the framework
       offered-mem        - " mem
@@ -184,11 +185,15 @@ column list:
       tasks-error        - " TASK_ERROR
       tasks-unreachable  - " TASK_UNREACHABLE
       active             - Is the framework active?
-      ui                 - Registered Web UI URL
+      web_ui             - Registered Web UI URL
       capabilities       - Registered capabilities
       registered         - Time at which the framework was registered
       unregistered       - Time at which the framework was unregistered, if any
       failover_timeout   - Failover timeout (in days)
+      recovered          - True if framework previously subscribed but hasn't yet re-subscribed after a Mesos master failover
+      connected          - Framework is currently connected
+      principal          - Principal that the framework used for authentication
+
 
 EOF
 }
@@ -770,7 +775,7 @@ frameworks() {
         tasks-statuses)
           interprete-cols tasks-staging tasks-starting tasks-running tasks-killing tasks-finished tasks-killed tasks-failed tasks-lost tasks-error tasks-unreachable
           ;;
-        id|role|active)
+        id|role|active|user|checkpoint|recovered|webui_url|connected|principal)
           HEADERS+=($col)
           COLUMNS+=(.$col)
           ;;
@@ -824,8 +829,8 @@ frameworks() {
           COLUMNS+=(".TASK_${status^^}")
           ;;
         ui)
-          HEADERS+=(ui)
-          COLUMNS+=(.webui_url)
+          ## backwards compat
+          interprete-cols webui_url
           ;;
 
         registered)
