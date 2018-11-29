@@ -43,11 +43,14 @@ auto-trust-cert() {
 
 bundle-infer-marathon-leader-ip-port() {
   local MARATHON_LEADER_FILE
+  DELIMITER="$1"
   MARATHON_LEADER_FILE=$(find *_master/*v2_leader.json* | head -n 1) || true
   if [ -z "$MARATHON_LEADER_FILE" ]; then
     MARATHON_LEADER_FILE=$(find *_master/*v2_info.json* | head -n 1)
   fi
-  cat-maybe-gunzip "$MARATHON_LEADER_FILE" | jq .leader -r
+  local LEADER_HOST=$(cat-maybe-gunzip "$MARATHON_LEADER_FILE" | jq .leader -r | cut -f 1 -d ':')
+  local LEADER_PORT="$(find *_master/*v2_info.json* | head -n 1 | cut -d / -f 2 | cut -d "$DELIMITER" -f 1)"
+  echo ${LEADER_HOST}:${LEADER_PORT}
 }
 
 target-bundle() {
@@ -60,8 +63,7 @@ target-bundle() {
   fi
   local MARATHON_FILE=$(find *_master/*v2_*.json* | head -n 1)
   export BUNDLE_PORT_DELIMITER=$(basename $MARATHON_FILE | sed 's/[0-9]//g' | head -c 1)
-  export BUNDLE_PORT_DELIMITER=-
-  local MARATHON_LEADER="$(bundle-infer-marathon-leader-ip-port)"
+  local MARATHON_LEADER="$(bundle-infer-marathon-leader-ip-port "$BUNDLE_PORT_DELIMITER")"
   echo "Mesos Master IP is $MESOS_MASTER_IP"
   echo "Marathon leader is $MARATHON_LEADER"
   export MESOS_CURL_CMD=diagnostic-curl-mesos
