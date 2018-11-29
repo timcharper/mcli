@@ -32,12 +32,14 @@ Commands:
   - app          : get info about a specific app
   - tasks        : list marathon tasks
   - task         : show info about a specific Marathon task
+  - kill         : Kill app tasks
   - curl         : curl Marathon
   - pod          : get info about a specific pod
   - pods         : list Marathon pods
   - queue        : list Marathon pending deployments
   - restart-app  : Restart an app
   - delete-app   : Delete an app
+  - scale-app    : Scale an app
 
 For help on commands, $0 <cmd> --help
 
@@ -74,6 +76,44 @@ usage: ${INVOCATION} <id>
 
   --color         - Force color output. By default, color output is enabled if
                     STDOUT is a terminal.
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
+scale-app-help() {
+  cat <<EOF
+Scale a Marathon app
+
+usage: ${INVOCATION} <app-id> [options]
+
+  Options:
+
+  --instances     - (required) The number of target instances
+
+  --force         - Force the app to be scaled, even if it is currently locked
+                    by some other deployment
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
+kill-tasks-help() {
+  cat <<EOF
+Kill a Marathon task
+
+usage: ${INVOCATION} <id1> <id2> <id3>
+
+  Options:
+
+  --wipe          - Expunge the task from Marathon; don't reuse it's id. If
+                    there's an associated persistent volume, delete it.
+
+  --scale         - Adjust the scale of the service as part of this kill
 
   --no-color      - Force monochrome output.
 
@@ -181,10 +221,12 @@ task() {
   marathon-curl "/v2/tasks" | jq $color_output '.tasks[] | select(.id == "'"$task_id"'")'
 }
 
-restart-app() {
-  declare -a otherargs
+scale-app() {
   local color_output=""
   local force=""
+  local instances=""
+  local app_id=""
+  local help="scale-app-help"
   if [ -t 1 ]; then
     color_output="--color-output"
   else
@@ -196,7 +238,76 @@ restart-app() {
     shift
     case "$arg" in
       --help)
-        inspect-help
+        $help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -f|--force)
+        force=1
+        ;;
+      -i|--instances)
+        instances="$1"
+        shift
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      *)
+        if [ -z "$app_id" ]; then
+          app_id="$arg"
+        else
+          echo "App already specified"
+          $help
+          exit 1
+        fi
+        ;;
+    esac
+  done
+
+  if [ -z "$app_id" ]; then
+    echo "App id must be specified"
+    $help
+    exit 1
+  fi
+
+  if [ -z "$instances" ]; then
+    echo "--instances must be specified"
+    $help
+    exit 1
+  fi
+
+  local params=""
+  if [ ! -z "$force" ]; then
+    params="?force=true"
+  fi
+
+  marathon-curl "/v2/apps${app_id}${params}" -X PUT --data '{"instances": '${instances}'}' | jq $color_output '.'
+}
+
+restart-app() {
+  declare -a otherargs
+  local color_output=""
+  local force=""
+  local help="restart-app-help"
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        $help
         exit 0
         ;;
       --color)
@@ -210,7 +321,7 @@ restart-app() {
         ;;
       -*)
         echo "unrecognized argument: $arg" 1>&2
-        restart-app-help
+        $help
         exit 1
         ;;
       *)
@@ -221,7 +332,7 @@ restart-app() {
 
   if [ "${#otherargs[@]}" -ne 1 ]; then
     echo "expected one argument specifying an app id; got ${otherargs[@]}"
-    restart-app-help
+    $help
     exit 1
   fi
 
@@ -233,6 +344,64 @@ restart-app() {
   fi
 
   marathon-curl "/v2/apps${app_id}/restart${params}" -X POST | jq $color_output '.'
+}
+
+kill-tasks() {
+  declare -a task_ids
+  local color_output=""
+  local help="kill-tasks-help"
+  declare -a params
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        $help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -s|--scale)
+        params+=("scale=true")
+        scale=1
+        ;;
+      -w|--wipe)
+        params+=("wipe=true")
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      *)
+        task_ids+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#task_ids[@]}" -eq 0 ]; then
+    echo "expected at least one argument specifying a task id; got ${task_ids[@]}"
+    $help
+    exit 1
+  fi
+
+  local payload
+  read -r -d '' payload <<-EOF || true
+{
+  "ids": ["$(join-str '", "' "${task_ids[@]}")"]
+}
+EOF
+  marathon-curl "/v2/tasks/delete?$(join-str "&" "${params[@]}")" --data "${payload}" | jq $color_output '.'
 }
 
 delete-app() {
@@ -1205,7 +1374,9 @@ case "$cmd" in
   tasks) tasks "$@" ;;
   task) task "$@" ;;
   curl) marathon-curl "$@" ;;
+  kill) kill-tasks "$@" ;;
   delete-app) delete-app "$@" ;;
   restart-app) restart-app "$@" ;;
+  scale-app) scale-app "$@" ;;
   *) echo "unrecognized command: $cmd"; help; exit 1 ;;
 esac

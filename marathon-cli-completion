@@ -58,6 +58,24 @@ _comp_marathon_tasks() {
   esac
 }
 
+# compgen doesn't handle dollar signs well :( we have to double escape them
+_compsafe() {
+  sed 's/\$/\\\\\\$/g'
+}
+
+_comp_marathon_kill() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color --scale --wipe" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli tasks -c id --no-header --no-align | _compsafe)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
 _comp_marathon_task() {
   case "${cur}" in
     -*)
@@ -65,7 +83,7 @@ _comp_marathon_task() {
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli tasks -c id --no-header --no-align)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli tasks -c id --no-header --no-align | _compsafe)" -- "${cur}"))
       return 0
       ;;
   esac
@@ -75,6 +93,19 @@ _comp_marathon_restart_app() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color --force" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli apps -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon_scale_app() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color --force --instances" -- "${cur}"))
       return 0
       ;;
     *)
@@ -237,7 +268,7 @@ _comp_marathon() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl tasks task apps queue app delete-app restart-app pod pods" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl tasks task apps queue app delete-app restart-app scale-app pod pods kill" -- ${cur}) )
 
     return 0
   fi
@@ -254,11 +285,17 @@ _comp_marathon() {
     tasks)
       _comp_marathon_tasks
       ;;
+    kill)
+      _comp_marathon_kill
+      ;;
     restart-app)
       _comp_marathon_restart_app
       ;;
     delete-app)
       _comp_marathon_delete_app
+      ;;
+    scale-app)
+      _comp_marathon_scale_app
       ;;
     pod)
       _comp_marathon_pod
