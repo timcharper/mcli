@@ -28,18 +28,20 @@ Usage: ${INVOCATION} <cmd> [<options...>]
 
 Commands:
 
-  - apps         : list marathon apps
   - app          : get info about a specific app
-  - tasks        : list marathon tasks
-  - task         : show info about a specific Marathon task
-  - kill         : Kill app tasks
+  - apps         : list marathon apps
   - curl         : curl Marathon
+  - delete-app   : Delete an app
+  - delete-pod   : Delete a pod
+  - kill         : Kill app tasks
   - pod          : get info about a specific pod
+  - pod-instances: List all pod instances
   - pods         : list Marathon pods
   - queue        : list Marathon pending deployments
   - restart-app  : Restart an app
-  - delete-app   : Delete an app
   - scale-app    : Scale an app
+  - task         : show info about a specific Marathon task
+  - tasks        : list marathon tasks
 
 For help on commands, $0 <cmd> --help
 
@@ -114,6 +116,23 @@ usage: ${INVOCATION} <id1> <id2> <id3>
                     there's an associated persistent volume, delete it.
 
   --scale         - Adjust the scale of the service as part of this kill
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
+delete-pod-help() {
+  cat <<EOF
+Delete a Marathon pod.
+
+usage: ${INVOCATION} <id>
+
+  Options:
+
+  --color         - Force color output. By default, color output is enabled if
+                    STDOUT is a terminal.
 
   --no-color      - Force monochrome output.
 
@@ -404,10 +423,11 @@ EOF
   marathon-curl "/v2/tasks/delete?$(join-str "&" "${params[@]}")" --data "${payload}" | jq $color_output '.'
 }
 
-delete-app() {
+delete-pod() {
   declare -a otherargs
   local color_output=""
   local force=""
+  local help="delete-pod-help"
   if [ -t 1 ]; then
     color_output="--color-output"
   else
@@ -419,7 +439,7 @@ delete-app() {
     shift
     case "$arg" in
       --help)
-        inspect-help
+        $help
         exit 0
         ;;
       --color)
@@ -433,7 +453,62 @@ delete-app() {
         ;;
       -*)
         echo "unrecognized argument: $arg" 1>&2
-        delete-app-help
+        $help
+        exit 1
+        ;;
+      *)
+        otherargs+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#otherargs[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a pod id; got ${otherargs[@]}"
+    $help
+    exit 1
+  fi
+
+  pod_id="${otherargs[0]}"
+
+  local params=""
+  if [ ! -z "$force" ]; then
+    params="?force=true"
+  fi
+
+  marathon-curl "/v2/pods${pod_id}" -X DELETE | jq $color_output '.'
+}
+
+delete-app() {
+  declare -a otherargs
+  local color_output=""
+  local force=""
+  local help="delete-app-help"
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        $help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -f|--force)
+        force=1
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        $help
         exit 1
         ;;
       *)
@@ -444,7 +519,7 @@ delete-app() {
 
   if [ "${#otherargs[@]}" -ne 1 ]; then
     echo "expected one argument specifying an app id; got ${otherargs[@]}"
-    delete-app-help
+    $help
     exit 1
   fi
 
@@ -588,6 +663,48 @@ column list:
       hcLastFailure         - "            last failure
       hcConsecutiveFailures - "            consecutive failures
       hcAlive               - "            instance considered healthy
+EOF
+}
+
+pod-instances-help() {
+  cat <<EOF
+List Marathon pod instances
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default               - Group: id status statusSince agentHostname
+
+      id
+      agentHostname
+      agentId
+      status                - Status of the pod
+      statusSince           - Time since pod was in the current status
+      specReferences
+      lastUpdated
+      lastChanged
+      cpus                  - Total amount of cpus allocated to pod
+      mem                   - "               mem
+      disk                  - "               disk
+      gpus                  - "               gpus
+      containerCount        - Count of containers in pod
+      volumeCount           - Count of volumes in pod
+      networkCount          - Count of networks assigned to pod
 EOF
 }
 
@@ -822,6 +939,7 @@ tasks() {
   declare -a COLUMNS
   declare -a HEADERS
   declare -a SELECTS
+  local help="tasks-help"
 
   COLUMN_LIST="default"
   NO_HEADER=false
@@ -849,12 +967,12 @@ tasks() {
         ;;
       -*)
         echo "Unrecognized option $arg" 1>&2
-        tasks-help
+        $help
         exit 1
         ;;
       *)
         echo "Unexpected argument: $arg" 1>&2
-        tasks-help
+        $help
         exit 1
         ;;
     esac
@@ -914,7 +1032,7 @@ tasks() {
           ;;
         *)
           echo "Unknown column: $col" 1>&2
-          tasks-help
+          $help
           exit 1
           ;;
       esac
@@ -944,6 +1062,124 @@ tasks() {
     fi
 
     marathon-curl "/v2/tasks" | jq '.tasks '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
+  }
+
+  if $NO_ALIGN; then
+    output-it
+  else
+    output-it | column -t -s $'\t'
+  fi
+}
+
+pod-instances() {
+  declare -a OTHERARGS
+  declare -a COLUMNS
+  declare -a HEADERS
+  declare -a SELECTS
+  local help="pod-instances-help"
+
+  COLUMN_LIST="default"
+  NO_HEADER=false
+  NO_ALIGN=false
+  SORT_COLS=id
+
+  ALIGN_CMD=$'| column -t -s "\t"'
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -s|--sort)
+        SORT_COLS=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "$@"; do
+      case "$col" in
+        default)
+          interprete-cols id status statusSince agentHostname
+          ;;
+
+        id|agentHostname|agentId|status|statusSince|specReferences|lastUpdated|lastChanged)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
+          ;;
+
+        cpus|mem|disk|gpus)
+          HEADERS+=($col)
+          COLUMNS+=(.resources.$col)
+          ;;
+
+        containerCount)
+          HEADERS+=($col)
+          COLUMNS+=("(.containers | length)")
+          ;;
+
+        volumeCount)
+          HEADERS+=($col)
+          COLUMNS+=("(.localVolumes | length)")
+          ;;
+
+        networkCount)
+          HEADERS+=($col)
+          COLUMNS+=("(.networks | length)")
+          ;;
+
+
+        *)
+          echo "Unknown column: $col" 1>&2
+          $help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  # hack: hijack interprete-cols to get the column expression
+  interprete-cols $SORT_COLS
+  SORT_EXPS=("${COLUMNS[@]}")
+  COLUMNS=()
+  HEADERS=()
+  interprete-cols $COLUMN_LIST
+
+  output-it() {
+    if ! $NO_HEADER; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+
+    SELECT_EXP=""
+    for expr in "${SELECTS[@]}"; do
+      SELECT_EXP+="| ${expr}"
+    done
+
+    if [ "${#SORT_EXPS[@]}" -ne 0 ]; then
+      SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
+    fi
+
+    marathon-curl "/v2/pods/::status" | jq '[.[] | .instances[]] '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
   }
 
   if $NO_ALIGN; then
@@ -1350,7 +1586,7 @@ pods() {
       SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
     fi
 
-    marathon-curl "/v2/pods" | jq '. '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
+    marathon-curl "/v2/pods/::status" | jq '. '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
   }
 
   if $NO_ALIGN; then
@@ -1371,11 +1607,13 @@ case "$cmd" in
   app) app "$@" ;;
   pods) pods "$@" ;;
   pod) pod "$@" ;;
+  pod-instances) pod-instances "$@" ;;
   tasks) tasks "$@" ;;
   task) task "$@" ;;
   curl) marathon-curl "$@" ;;
   kill) kill-tasks "$@" ;;
   delete-app) delete-app "$@" ;;
+  delete-pod) delete-pod "$@" ;;
   restart-app) restart-app "$@" ;;
   scale-app) scale-app "$@" ;;
   *) echo "unrecognized command: $cmd"; help; exit 1 ;;
