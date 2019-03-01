@@ -28,20 +28,21 @@ Usage: ${INVOCATION} <cmd> [<options...>]
 
 Commands:
 
-  - app          : get info about a specific app
-  - apps         : list marathon apps
-  - curl         : curl Marathon
-  - delete-app   : Delete an app
-  - delete-pod   : Delete a pod
-  - kill         : Kill app tasks
-  - pod          : get info about a specific pod
-  - pod-instances: List all pod instances
-  - pods         : list Marathon pods
-  - queue        : list Marathon pending deployments
-  - restart-app  : Restart an app
-  - scale-app    : Scale an app
-  - task         : show info about a specific Marathon task
-  - tasks        : list marathon tasks
+  - app               : get info about a specific app
+  - apps              : list marathon apps
+  - curl              : curl Marathon
+  - delete-app        : Delete an app
+  - delete-pod        : Delete a pod
+  - kill              : Kill app tasks
+  - kill-pod-instance : Kill Marathon pod instance
+  - pod               : get info about a specific pod
+  - pod-instances     : List all pod instances
+  - pods              : list Marathon pods
+  - queue             : list Marathon pending deployments
+  - restart-app       : Restart an app
+  - scale-app         : Scale an app
+  - task              : show info about a specific Marathon task
+  - tasks             : list marathon tasks
 
 For help on commands, $0 <cmd> --help
 
@@ -97,6 +98,23 @@ usage: ${INVOCATION} <app-id> [options]
 
   --force         - Force the app to be scaled, even if it is currently locked
                     by some other deployment
+
+  --no-color      - Force monochrome output.
+
+  --help          - This help
+EOF
+}
+
+kill-pod-instance-help() {
+  cat <<EOF
+Kill a Marathon pod
+
+usage: ${INVOCATION} <instance_id>
+
+  Options:
+
+  --wipe          - Expunge the task from Marathon; don't reuse it's id. If
+                    there's an associated persistent volume, delete it.
 
   --no-color      - Force monochrome output.
 
@@ -421,6 +439,64 @@ kill-tasks() {
 }
 EOF
   marathon-curl "/v2/tasks/delete?$(join-str "&" "${params[@]}")" --data "${payload}" | jq $color_output '.'
+}
+
+kill-pod-instance() {
+  declare -a instance_id
+  local color_output=""
+  local help="kill-pod-instance-help"
+  declare -a params
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        $help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -w|--wipe)
+        params+=("wipe=true")
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      *)
+        if [ -z "$instance_id" ]; then
+          instance_id="$arg"
+        else
+          echo "Only one instance id can be specified" 1>&2
+          $help
+          exit 1
+        fi
+        ;;
+    esac
+  done
+
+  # find the pod, because, well, the API is cool like that
+  local pod_id=$(marathon-curl "/v2/pods/::status" | jq -r '. | map(select(.instances[] | select(.id == "'"${instance_id}"'"))) | map(.id)[0] // ""')
+
+  if [ -z "$pod_id" ]; then
+    echo "Could not find instance ${instance_id}" 1>&2
+    exit 1
+  fi
+
+  echo "$pod_id"
+
+  marathon-curl "/v2/pods/${pod_id}::instances/${instance_id}?$(join-str "&" "${params[@]}")" -X DELETE | jq $color_output '.'
 }
 
 delete-pod() {
@@ -1510,7 +1586,7 @@ pods() {
           HEADERS+=($col)
           COLUMNS+=(.spec.$col)
           ;;
-        instanceCount)
+
           HEADERS+=($col)
           COLUMNS+=('(.instances | length)')
           ;;
@@ -1586,7 +1662,7 @@ pods() {
       SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
     fi
 
-    marathon-curl "/v2/pods/::status" | jq '. '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
+    marathon-curl "/v2/pods" | jq '. '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
   }
 
   if $NO_ALIGN; then
@@ -1611,7 +1687,8 @@ case "$cmd" in
   tasks) tasks "$@" ;;
   task) task "$@" ;;
   curl) marathon-curl "$@" ;;
-  kill) kill-tasks "$@" ;;
+  kill|kill-tasks) kill-tasks "$@" ;;
+  kill-pod-instance) kill-pod-instance "$@" ;;
   delete-app) delete-app "$@" ;;
   delete-pod) delete-pod "$@" ;;
   restart-app) restart-app "$@" ;;

@@ -100,6 +100,19 @@ _compsafe() {
   sed 's/\$/\\\\\\$/g'
 }
 
+_comp_marathon_kill_pod_instance() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color --wipe" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli pod-instances -c id --no-header --no-align | _compsafe)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
 _comp_marathon_kill() {
   case "${cur}" in
     -*)
@@ -318,7 +331,7 @@ _comp_marathon() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl tasks task apps queue app delete-pod delete-app restart-app scale-app pod pods pod-instances kill" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl tasks task apps queue app delete-pod delete-app restart-app scale-app pod pods pod-instances kill kill-pod-instance" -- ${cur}) )
 
     return 0
   fi
@@ -337,6 +350,9 @@ _comp_marathon() {
       ;;
     tasks)
       _comp_marathon_tasks
+      ;;
+    kill-pod-instance)
+      _comp_marathon_kill_pod_instance
       ;;
     kill)
       _comp_marathon_kill
