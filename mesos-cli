@@ -227,14 +227,15 @@ column list:
 
       default      - Group: id,host,state,started
       id           - Task id
-      n,name       - Name of container
+      name         - Name of container
+      role         - Task role
       cpus         - # of cpus assigned to task
       mem          - # of ram (MB) assigned to task
       gpus         - # of gpus assigned to task
       disk         - # of disk (MB) assigned to task
       ports        - ports assigned to process
-      s,state      - Status off task
-      t,type       - Type of container (docker or not)
+      state        - Status off task
+      type         - Type of container (docker or not)
       image        - If docker, what image is used
       h,host       - Host on which container is running
       ip           - IP address of task
@@ -408,9 +409,11 @@ agent() {
   return 1
 }
 
-task() {
+framework() {
   declare -a OTHERARGS
   local COLOR_OUTPUT=""
+  local help=task-help
+  local framework_id=""
   if [ -t 1 ]; then
     COLOR_OUTPUT="--color-output"
   else
@@ -423,7 +426,7 @@ task() {
     shift
     case "$arg" in
       --help)
-        task-help
+        $help
         exit 0
         ;;
       --color)
@@ -434,7 +437,52 @@ task() {
         ;;
       -*)
         echo "Unrecognized argument: $arg" 1>&2
-        task-help
+        $help
+        exit 1
+        ;;
+      *)
+        if [ -z "$framework_id" ]; then
+          framework_id="$arg"
+        else
+          echo "expected one argument specifying a framework id; got multiple"
+          $help
+          exit 1
+        fi
+        ;;
+    esac
+  done
+
+  jq $COLOR_OUTPUT '.frameworks[] | select(.id == "'"$arg"'")' <(mesos-curl "/frameworks")
+}
+
+task() {
+  declare -a OTHERARGS
+  local COLOR_OUTPUT=""
+  local help=task-help
+  if [ -t 1 ]; then
+    COLOR_OUTPUT="--color-output"
+  else
+    COLOR_OUTPUT="--monochrome-output"
+  fi
+
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        $help
+        exit 0
+        ;;
+      --color)
+        COLOR_OUTPUT="--color-output"
+        ;;
+      --no-color)
+        COLOR_OUTPUT="--monochrome-output"
+        ;;
+      -*)
+        echo "Unrecognized argument: $arg" 1>&2
+        $help
         exit 1
         ;;
       *)
@@ -445,7 +493,7 @@ task() {
 
   if [ "${#OTHERARGS[@]}" -ne 1 ]; then
     echo "expected one argument specifying a task id; got ${OTHERARGS[@]}"
-    task-help
+    $help
     exit 1
   fi
 
@@ -730,6 +778,7 @@ frameworks() {
   NO_ALIGN=false
   ALL=false
   SORT_COLS=
+  local help=frameworks-help
 
   ALIGN_CMD=$'| column -t -s "\t"'
   while ! [ -z "$1" ]; do
@@ -755,7 +804,7 @@ frameworks() {
         ;;
       -*)
         echo "Unrecognized option $arg" 1>&2
-        frameworks-help
+        $help
         exit 1
         ;;
       *)
@@ -854,7 +903,7 @@ frameworks() {
           ;;
         *)
           echo "Unknown column: $col" 1>&2
-          frameworks-help
+          $help
           exit 1
           ;;
       esac
@@ -964,17 +1013,9 @@ tasks() {
           HEADERS+=(id)
           COLUMNS+=(.id)
           ;;
-        cpus)
-          HEADERS+=(cpus)
-          COLUMNS+=(.resources.cpus)
-          ;;
-        mem)
-          HEADERS+=(mem)
-          COLUMNS+=(.resources.mem)
-          ;;
-        gpus)
-          HEADERS+=(gpus)
-          COLUMNS+=(.resources.gpus)
+        cpus|mem|gpus|disk)
+          HEADERS+=($col)
+          COLUMNS+=(.resources.$col)
           ;;
         started)
           HEADERS+=(started)
@@ -988,21 +1029,13 @@ tasks() {
           HEADERS+=(ports)
           COLUMNS+=(.resources.ports)
           ;;
-        disk)
-          HEADERS+=(disk)
-          COLUMNS+=(.resources.disk)
-          ;;
-        s|state)
-          HEADERS+=(state)
-          COLUMNS+=(.state)
+        state|name|framework_id|executor_id|role)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
           ;;
         t|type)
           HEADERS+=(type)
           COLUMNS+=('.container.type // ""')
-          ;;
-        n|name)
-          HEADERS+=(name)
-          COLUMNS+=(.name)
           ;;
         image)
           HEADERS+=(image)
@@ -1015,14 +1048,6 @@ tasks() {
         agent_id)
           HEADERS+=(agent_id)
           COLUMNS+=(.slave_id)
-          ;;
-        executor_id)
-          HEADERS+=(executor_id)
-          COLUMNS+=(.executor_id)
-          ;;
-        framework_id)
-          HEADERS+=(framework_id)
-          COLUMNS+=(.framework_id)
           ;;
         ip)
           HEADERS+=(ip)
@@ -1106,6 +1131,7 @@ if [ $(basename "$0") != "bash" ]; then
     curl) mesos-curl "$@" ;;
     ps|tasks) tasks "$@" ;;
     frameworks) frameworks "$@" ;;
+    framework) framework "$@" ;;
     agents) agents "$@" ;;
     agent) agent "$@" ;;
     executor-url) executor-url "$@" ;;
