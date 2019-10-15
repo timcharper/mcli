@@ -2,7 +2,8 @@
 
 cat-maybe-gzip() {
   if [ -f "$1" ]; then
-    cat $1
+    # unfortunately, just because a file lacks the gzip extension, in some bundles it still may be gzipped :(
+    gunzip -c -q $1 || cat $1
   else
     gunzip -c ${1}.gz
   fi

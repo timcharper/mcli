@@ -10,9 +10,19 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+cat-maybe-gzip() {
+  if [ -f "$1" ]; then
+    # unfortunately, just because a file lacks the gzip extension, in some bundles it still may be gzipped :(
+    gunzip -c -q $1 || cat $1
+  else
+    gunzip -c ${1}.gz
+  fi
+}
+
+
 path-filename() {
   # we ignore query strings
-  echo ${URL_HOSTNAME}_master/${URL_PORT}${BUNDLE_PORT_DELIMITER}master_$(echo "$1" | cut -f 1 -d ? | sed 's|/|_|g').json.gz
+  echo ${URL_HOSTNAME}_master/${URL_PORT}${BUNDLE_PORT_DELIMITER}master_$(echo "$1" | cut -f 1 -d ? | sed 's|/|_|g').json
 }
 
 cat-path() {
@@ -28,7 +38,7 @@ cat-path() {
     fi
     cat-path "tasks-reconst"
   else
-    cat $(path-filename "$URL_PATH") | gunzip
+    cat-maybe-gzip $(path-filename "$URL_PATH")
   fi
 }
 
