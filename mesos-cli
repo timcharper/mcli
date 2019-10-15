@@ -165,7 +165,7 @@ column list:
       p,pid              - Mesos PID
       n,name             - Framework name
       user               - User as which the framework is registered
-      role               - Framework role
+      roles              - Framework roles
       offered-disk       - Amount of disk offered to the framework
       offered-mem        - " mem
       offered-gpus       - " gpus
@@ -980,9 +980,13 @@ frameworks() {
         tasks-statuses)
           interprete-cols tasks-staging tasks-starting tasks-running tasks-killing tasks-finished tasks-killed tasks-failed tasks-lost tasks-error tasks-unreachable
           ;;
-        id|role|active|user|checkpoint|recovered|webui_url|connected|principal)
+        id|active|user|checkpoint|recovered|webui_url|connected|principal)
           HEADERS+=($col)
           COLUMNS+=(.$col)
+          ;;
+        role|roles)
+          HEADERS+=(roles)
+          COLUMNS+=('.role // (.roles | join(","))')
           ;;
         h|hostname)
           HEADERS+=(hostname)
@@ -1173,13 +1177,17 @@ tasks() {
           HEADERS+=($col)
           COLUMNS+=(.resources.$col)
           ;;
+        running)
+          HEADERS+=(running)
+          COLUMNS+=('((.statuses | map(select(.state == "TASK_RUNNING"))) | map(.timestamp | todate)[0] // "-")')
+          ;;
         started)
           HEADERS+=(started)
-          COLUMNS+=('((.statuses | map(select(.state == "TASK_RUNNING"))) | map(.timestamp | todate)[0] // "")')
+          COLUMNS+=('((.statuses | map(select((.state == "TASK_STARTED") or (.state == "TASK_RUNNING")))) | map(.timestamp | todate)[0] // "-")')
           ;;
         finished)
           HEADERS+=(finished)
-          COLUMNS+=('((.statuses | map(select(.state != "TASK_RUNNING"))) | map(.timestamp | todate)[0] // "")')
+          COLUMNS+=('((.statuses | map(select((.state != "TASK_RUNNING") and (.state != "TASK_STARTING")))) | map(.timestamp | todate)[0] // "-")')
           ;;
         ports)
           HEADERS+=(ports)
