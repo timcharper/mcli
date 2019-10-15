@@ -1677,6 +1677,99 @@ if [ -z "$cmd" ]; then
   exit 1
 fi
 
+logging-list() {
+  output-it() {
+    printf "path\tlevel\n"
+    marathon-curl /logging | jq '. | to_entries | sort_by(.key) | map(.key + "\t" + .value)[]' -r
+  }
+
+  output-it | column -t -s $'\t'
+}
+
+logging-set() {
+  local NAME=ROOT
+  local DURATION=""
+  help() {
+    cat <<-EOF
+Set log level
+
+usage: ${INVOCATION} set <ERROR|WARN|INFO|DEBUG|TRACE> [options]
+
+  Options:
+
+  --duration      - Duration for which to change the log level
+
+  --name          - Name of the logger to set
+
+  --help          - This help
+EOF
+
+EOF
+  }
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -d|--duration)
+        DURATION=$1
+        shift
+        ;;
+      -n|--name)
+        NAME=$1
+        shift
+        ;;
+      --help)
+        $help
+        exit 1
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      DEBUG|INFO|TRACE|WARN|ERROR)
+        if [ -z "$LEVEL" ]; then
+          LEVEL="$arg"
+        else
+          echo "Level already specified"
+          $help
+          exit 1
+        fi
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+    esac
+  done
+
+  if [ -z "$LEVEL" ]; then
+    $help
+    exit 1
+  fi
+
+  local DURATIONJSON=""
+  if [ ! -z "$DURATION" ]; then
+    DURATIONJSON="$(printf ', "durationSeconds": %d' "$DURATION")"
+  fi
+
+  marathon-curl /logging -X POST --data "$(printf '{"logger": "%s", "level": "%s"%s}' "$NAME" "$LEVEL" "$DURATIONJSON")"
+}
+
+
+logging() {
+  subcmd=$1
+  shift
+  case "$subcmd" in
+    list)
+      logging-list "$@"
+      ;;
+    set)
+      logging-set "$@"
+  esac
+}
+
 case "$cmd" in
   queue) queue "$@" ;;
   apps) apps "$@" ;;
@@ -1693,5 +1786,6 @@ case "$cmd" in
   delete-pod) delete-pod "$@" ;;
   restart-app) restart-app "$@" ;;
   scale-app) scale-app "$@" ;;
+  log) logging "$@" ;;
   *) echo "unrecognized command: $cmd"; help; exit 1 ;;
 esac
