@@ -37,6 +37,7 @@ Commands:
   - curl         : curl helper for mesos; first arg URI, rest forwarded to curl.
   - executor-url : show the executor-url for a given task
   - frameworks   : list frameworks
+  - reservations : list mesos reservations
   - sandbox      : show the sandbox for a given task
   - task         : inspect a mesos task
   - tasks        : list mesos tasks
@@ -194,6 +195,38 @@ column list:
       connected          - Framework is currently connected
       principal          - Principal that the framework used for authentication
 
+
+EOF
+}
+
+reservations-help() {
+  cat <<EOF
+List reservations in the cluster.
+
+usage: ${INVOCATION} [options...]
+
+  Options:
+
+  --sort, -s <col1,col2,...>   - sort output by the columns; see column list
+                                 below.
+
+  --columns, -c <col1,col2,..> - display columns; see column list below
+
+  --no-header                  - removes the column header from being printed
+                                 out
+
+  --no-align                   - don't align; output tab delimited columns
+
+  --help                       - This help
+
+column list:
+
+      default      - Group: name,type,value,hostname,role
+      name         - Name of resource (i.e. cpus, mem)
+      role         - Resource role
+      hostname     - Hostname of the agent on which reservation resides
+      agent-id     - Agent id on which reservation resides
+      value        - Value of the reservation
 
 EOF
 }
@@ -617,6 +650,129 @@ sandbox() {
       fi
     done
   done
+}
+
+reservations() {
+  declare -a OTHERARGS
+  declare -a COLUMNS
+  declare -a HEADERS
+
+  declare -a SELECTS
+
+  COLUMN_LIST="default"
+  NO_HEADER=false
+  NO_ALIGN=false
+  SORT_COLS=
+  local help=reservations-help
+
+  ALIGN_CMD=$'| column -t -s "\t"'
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      -s|--sort)
+        SORT_COLS=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      -c|--columns)
+        COLUMN_LIST=$(echo "$1" | tr , ' ')
+        shift
+        ;;
+      --no-header)
+        NO_HEADER=true
+        ;;
+      --no-align)
+        NO_ALIGN=true
+        ;;
+      -*)
+        echo "Unrecognized option $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      *)
+        echo "Unexpected argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+    esac
+  done
+
+  interprete-cols() {
+    for col in "$@"; do
+      case "$col" in
+        default)
+          interprete-cols name type value hostname role
+          ;;
+        name|type|role)
+          HEADERS+=($col)
+          COLUMNS+=(.$col)
+          ;;
+        hostname)
+          HEADERS+=($col)
+          COLUMNS+=('.slave.hostname')
+          ;;
+
+        framework)
+          HEADERS+=($col)
+          COLUMNS+=('.slave.hostname')
+          ;;
+
+        marathon-framework-id)
+          HEADERS+=($col)
+          COLUMNS+=('(.reservation.labels.labels | map(select(.key == "marathon_framework_id") | .value)[0] // "")')
+          ;;
+        marathon-task-id)
+          HEADERS+=($col)
+          COLUMNS+=('(.reservation.labels.labels | map(select(.key == "marathon_task_id") | .value)[0] // "")')
+          ;;
+        agent-id)
+          HEADERS+=($col)
+          COLUMNS+=('(.slave.id)')
+          ;;
+        value)
+          HEADERS+=($col)
+          COLUMNS+=('((.type | ascii_downcase) as $field | .[$field] | values[] | values)')
+          ;;
+
+        *)
+          echo "Unknown column: $col" 1>&2
+          $help
+          exit 1
+          ;;
+      esac
+    done
+  }
+
+  # hack: hijack interprete-cols to get the column expression
+  interprete-cols $SORT_COLS
+  SORT_EXPS=("${COLUMNS[@]}")
+  COLUMNS=()
+  HEADERS=()
+  interprete-cols $COLUMN_LIST
+
+  output-it() {
+    if ! $NO_HEADER; then
+      join-str $'\t' "${HEADERS[@]}"
+      echo
+    fi
+
+    SELECT_EXP=""
+    for expr in "${SELECTS[@]}"; do
+      SELECT_EXP+="| ${expr}"
+    done
+
+    if [ "${#SORT_EXPS[@]}" -ne 0 ]; then
+      SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
+    fi
+
+    jq -r '[.slaves[] as $slave | $slave.reserved_resources_full[][] + {slave: $slave}] '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' <(mesos-curl "/slaves")
+  }
+
+  if $NO_ALIGN; then
+    output-it
+  else
+    output-it | column -t -s $'\t'
+  fi
 }
 
 agents() {
@@ -1138,6 +1294,7 @@ if [ $(basename "$0") != "bash" ]; then
     inspect|task) task "$@" ;;
     sandbox) sandbox "$@" ;;
     curl) mesos-curl "$@" ;;
+    reservations) reservations "$@" ;;
     *) echo "unrecognized command: $cmd"; help; exit 1 ;;
   esac
 fi

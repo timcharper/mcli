@@ -22,6 +22,42 @@ _comp_mesos_curl() {
   esac
 }
 
+_comp_mesos_reservations() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--all --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
+      return 0
+      ;;
+  esac
+
+  case "${prev}" in
+    -c|--columns|-s|--sort)
+      local cols curcol others n
+      cols=($(echo "$cur" | tr ',' ' '))
+      if [ ! ${#cols[@]} = 0 ]; then
+        if [ "${cur:${#cur}-1}" = "," ]; then
+          cols+=("")
+        fi
+
+        curcol=${cols[${#cols[@]}-1]}
+        others=$(_comp_mesos_join-str , "${cols[@]:0:${#cols[@]}-1}")
+      else
+        others=""
+        curcol=""
+      fi
+
+      COMPREPLY+=( $(compgen -W "default name role hostname agent-id value" -- "${curcol}"))
+      if [ ! -z "$others" ]; then
+        for ((n=0; n<${#COMPREPLY[@]}; n++)); do
+          COMPREPLY[$n]="${others},${COMPREPLY[n]}"
+        done
+      fi
+
+      return 0
+      ;;
+  esac
+}
+
 _comp_mesos_tasks() {
   case "${cur}" in
     -*)
@@ -174,7 +210,7 @@ _comp_mesos() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl executor-url task agent agents frameworks tasks sandbox" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl executor-url task agent agents frameworks tasks sandbox reservations" -- ${cur}) )
 
     return 0
   fi
@@ -196,6 +232,9 @@ _comp_mesos() {
       ;;
     frameworks)
       _comp_mesos_frameworks
+      ;;
+    reservations)
+      _comp_mesos_reservations
       ;;
     ps|tasks)
       _comp_mesos_tasks
