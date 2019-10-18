@@ -1586,7 +1586,7 @@ pods() {
           HEADERS+=($col)
           COLUMNS+=(.spec.$col)
           ;;
-
+        instanceCount)
           HEADERS+=($col)
           COLUMNS+=('(.instances | length)')
           ;;
