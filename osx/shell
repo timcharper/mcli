@@ -1,9 +1,21 @@
 #!/usr/local/bin/bash
-
 export MCLIPATH=$(cd $(dirname $0)/..; pwd)
 if [ -z "$ENTERED" ]; then
   export PATH=$MCLIPATH:$MCLIPATH/osx:$PATH
-  source /usr/local/share/bash-completion/bash_completion
+fi
+
+if [ $(which bash) == "/bin/bash" ]; then
+  echo "Error! The default bash is /bin/bash; The bash version with which Mac OS ships is too old for mcli."
+  echo
+  if [ -z /usr/local/bin/bash ]; then
+    echo "To rectify, install bash with Homebrew: brew install bash; then make sure that /usr/local/bin is the first path in PATH"
+  else
+    echo "To rectify, make sure your PATH statement includes /usr/local/bin as the first element; IE, run:"
+    echo
+    echo '  export PATH=/usr/local/bin:$PATH'
+    echo
+  fi
+  exit 1
 fi
 
 export ENTERED=1

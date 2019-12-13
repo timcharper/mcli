@@ -1,6 +1,14 @@
-source /usr/local/share/bash-completion/bash_completion
-source $HOME/.bashrc
-echo "le completion"
+latest=$(ls -w1 /usr/local/Cellar/bash-completion@2 | sort -n | tail -n 1)
+if [ -z "$latest" ]; then
+  echo
+  echo "Error! bash-completion@2 not found. Completion will not work."
+  echo "To install, type 'brew install bash-completion@2'"
+  echo
+else
+  source /usr/local/Cellar/bash-completion@2/2.8/share/bash-completion/bash_completion
+fi
+
+if [ -f $HOME/.bashrc ]; then source $HOME/.bashrc; fi
 source $MCLIPATH/mesos-cli-completion
 source $MCLIPATH/marathon-cli-completion
 source $MCLIPATH/dcos-support
