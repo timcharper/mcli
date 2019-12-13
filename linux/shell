@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+export MCLIPATH=$(cd $(dirname $0)/..; pwd)
+
+echo "Loaded mcli shell / env"
+exec bash --rcfile $MCLIPATH/linux/mclirc
