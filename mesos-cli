@@ -839,7 +839,7 @@ agents() {
           ;;
         attributes)
           HEADERS+=($col)
-          COLUMNS+=('(.attributes | to_entries | map(.key + "=" + .value) | join(","))')
+          COLUMNS+=('(.attributes | to_entries | map(.key + "=" + (.value | tostring)) | join(","))')
           ;;
         disk|mem|gpus|cpus)
           HEADERS+=($col)
@@ -1215,7 +1215,7 @@ tasks() {
           ;;
         ip)
           HEADERS+=(ip)
-          COLUMNS+=('(.statuses | map(.container_status.network_infos[] | .ip_addresses[] | .ip_address)[0])')
+          COLUMNS+=('(.statuses | map((.container_status.network_infos // [])[] | .ip_addresses[] | .ip_address)[0])')
           ;;
         ips)
           HEADERS+=(ips)
