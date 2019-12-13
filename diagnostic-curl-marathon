@@ -32,6 +32,9 @@ cat-path() {
         cat-maybe-gzip "$(path-filename v2/groups)" | jq -c -M '[recurse(.groups[]) | .pods[]]'
       fi
       ;;
+    v2/pods/::*)
+      cat-maybe-gzip "$(path-filename "$URL_PATH")"
+      ;;
     v2/pods/?*)
       POD_ID="${URL_PATH:7}"
       cat-path "v2/pods" | jq -M -c '.[] | select (.id == "'"$POD_ID"'")'
