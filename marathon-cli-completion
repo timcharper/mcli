@@ -22,7 +22,7 @@ _comp_marathon_curl() {
   esac
 }
 
-_comp_marathon_pod_instances() {
+_comp_marathon_pod_instance_list() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--all --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
@@ -59,7 +59,7 @@ _comp_marathon_pod_instances() {
   esac
 }
 
-_comp_marathon_tasks() {
+_comp_marathon_app_instance_list() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--all --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
@@ -100,111 +100,169 @@ _compsafe() {
   sed 's/\$/\\\\\\$/g'
 }
 
-_comp_marathon_kill_pod_instance() {
+_comp_marathon_pod_instance_kill() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color --wipe" -- "${cur}"))
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli pod-instances -c id --no-header --no-align | _compsafe)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli pod instance list -c id --no-header --no-align | _compsafe)" -- "${cur}"))
       return 0
       ;;
   esac
 }
 
-_comp_marathon_kill() {
+_comp_marathon_app_instance_kill() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color --scale --wipe" -- "${cur}"))
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli tasks -c id --no-header --no-align | _compsafe)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli app instance list -c id --no-header --no-align | _compsafe)" -- "${cur}"))
       return 0
       ;;
   esac
 }
 
-_comp_marathon_task() {
+_comp_marathon_app_instance_show() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli tasks -c id --no-header --no-align | _compsafe)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli app instance list -c id --no-header --no-align | _compsafe)" -- "${cur}"))
       return 0
       ;;
   esac
 }
 
-_comp_marathon_restart_app() {
+_comp_marathon_app_restart() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color --force" -- "${cur}"))
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli apps -c id --no-header --no-align)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli app list -c id --no-header --no-align)" -- "${cur}"))
       return 0
       ;;
   esac
 }
 
-_comp_marathon_scale_app() {
+_comp_marathon_app_scale() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color --force --instances" -- "${cur}"))
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli apps -c id --no-header --no-align)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli app list -c id --no-header --no-align)" -- "${cur}"))
       return 0
       ;;
   esac
 }
 
-_comp_marathon_delete_app() {
+_comp_marathon_app_delete() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color --force" -- "${cur}"))
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli apps -c id --no-header --no-align)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli app list -c id --no-header --no-align)" -- "${cur}"))
       return 0
       ;;
   esac
 }
 
-_comp_marathon_delete_pod() {
+_comp_marathon_pod_delete() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli pods -c id --no-header --no-align)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli pod list -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon_pod_show() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli pod list -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon_pod_edit() {
+  case "${cur}" in
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli pod list -c id --no-header --no-align)" -- "${cur}"))
       return 0
       ;;
   esac
 }
 
 _comp_marathon_pod() {
-  case "${cur}" in
-    -*)
-      COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
-      return 0
-      ;;
-    *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli pods -c id --no-header --no-align)" -- "${cur}"))
-      return 0
-      ;;
+  if [ ${COMP_CWORD} = 2 ]; then
+    COMPREPLY=( $(compgen -W "show list instance delete edit" -- ${cur}) )
+
+    return 0
+  fi
+
+  cmd=${COMP_WORDS[2]}
+
+  case "$cmd" in
+    show) _comp_marathon_pod_show ;;
+    delete) _comp_marathon_pod_delete ;;
+    list) _comp_marathon_pod_list ;;
+    instance) _comp_marathon_pod_instance ;;
+    edit) _comp_marathon_pod_edit ;;
   esac
 }
 
-_comp_marathon_pods() {
+_comp_marathon_app_instance() {
+  if [ ${COMP_CWORD} = 3 ]; then
+    COMPREPLY=( $(compgen -W "kill list show" -- ${cur}) )
+
+    return 0
+  fi
+
+  cmd=${COMP_WORDS[3]}
+
+  case "$cmd" in
+    kill) _comp_marathon_app_instance_kill ;;
+    show) _comp_marathon_app_instance_show ;;
+    list) _comp_marathon_app_instance_list ;;
+  esac
+}
+
+_comp_marathon_pod_instance() {
+  if [ ${COMP_CWORD} = 3 ]; then
+    COMPREPLY=( $(compgen -W "kill list" -- ${cur}) )
+
+    return 0
+  fi
+
+  cmd=${COMP_WORDS[3]}
+
+  case "$cmd" in
+    kill) _comp_marathon_pod_instance_kill ;;
+    list) _comp_marathon_pod_instance_list ;;
+  esac
+}
+
+_comp_marathon_pod_list() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--all --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
@@ -240,16 +298,49 @@ _comp_marathon_pods() {
   esac
 }
 
-_comp_marathon_app() {
+_comp_marathon_app_edit() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
       return 0
       ;;
     *)
-      COMPREPLY+=( $(compgen -W "$(marathon-cli apps -c id --no-header --no-align)" -- "${cur}"))
+      COMPREPLY+=( $(compgen -W "$(marathon-cli app list -c id --no-header --no-align)" -- "${cur}"))
       return 0
       ;;
+  esac
+}
+
+_comp_marathon_app_show() {
+  case "${cur}" in
+    -*)
+      COMPREPLY+=( $(compgen -W "--help --color --no-color" -- "${cur}"))
+      return 0
+      ;;
+    *)
+      COMPREPLY+=( $(compgen -W "$(marathon-cli app list -c id --no-header --no-align)" -- "${cur}"))
+      return 0
+      ;;
+  esac
+}
+
+_comp_marathon_app() {
+  if [ ${COMP_CWORD} = 2 ]; then
+    COMPREPLY=( $(compgen -W "show list instance delete edit" -- ${cur}) )
+
+    return 0
+  fi
+
+  cmd=${COMP_WORDS[2]}
+
+  case "$cmd" in
+    show) _comp_marathon_app_show ;;
+    delete) _comp_marathon_app_delete ;;
+    list) _comp_marathon_app_list ;;
+    instance) _comp_marathon_app_instance ;;
+    edit) _comp_marathon_app_edit ;;
+    scale) _comp_marathon_app_scale ;;
+    restart) _comp_marathon_app_restart ;;
   esac
 }
 
@@ -289,7 +380,7 @@ _comp_marathon_queue() {
   esac
 }
 
-_comp_marathon_apps() {
+_comp_marathon_app_list() {
   case "${cur}" in
     -*)
       COMPREPLY+=( $(compgen -W "--all --sort -s --columns -c --no-header --no-align --help" -- "${cur}"))
@@ -331,7 +422,7 @@ _comp_marathon() {
   COMPREPLY=()
 
   if [ ${COMP_CWORD} = 1 ]; then
-    COMPREPLY=( $(compgen -W "curl tasks task apps queue app delete-pod delete-app restart-app scale-app pod pods pod-instances kill kill-pod-instance" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "curl app queue app pod kill" -- ${cur}) )
 
     return 0
   fi
@@ -342,38 +433,8 @@ _comp_marathon() {
     curl)
       _comp_marathon_curl
       ;;
-    task)
-      _comp_marathon_task
-      ;;
-    pod-instances)
-      _comp_marathon_pod_instances
-      ;;
-    tasks)
-      _comp_marathon_tasks
-      ;;
-    kill-pod-instance)
-      _comp_marathon_kill_pod_instance
-      ;;
-    kill)
-      _comp_marathon_kill
-      ;;
-    restart-app)
-      _comp_marathon_restart_app
-      ;;
-    delete-app)
-      _comp_marathon_delete_app
-      ;;
-    delete-pod)
-      _comp_marathon_delete_pod
-      ;;
-    scale-app)
-      _comp_marathon_scale_app
-      ;;
     pod)
       _comp_marathon_pod
-      ;;
-    pods)
-      _comp_marathon_pods
       ;;
     app)
       _comp_marathon_app

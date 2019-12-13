@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 : ${MARATHON_CURL_CMD:=curl}
-: ${MARATHON_CLI_CFG:=/etc/default/mesos-cli}
+: ${MARATHON_CLI_CFG:=/etc/default/marathon-cli}
 : ${MARATHON_HTTP_PROTO:=http}
 : ${MARATHON_MASTER_URL:=${MARATHON_HTTP_PROTO}://marathon.mesos:8080}
 
@@ -28,30 +28,54 @@ Usage: ${INVOCATION} <cmd> [<options...>]
 
 Commands:
 
-  - app               : get info about a specific app
-  - apps              : list marathon apps
+  - app               : app sub-commands
   - curl              : curl Marathon
-  - delete-app        : Delete an app
-  - delete-pod        : Delete a pod
-  - kill              : Kill app tasks
-  - kill-pod-instance : Kill Marathon pod instance
-  - pod               : get info about a specific pod
-  - pod-instances     : List all pod instances
-  - pods              : list Marathon pods
+  - log               ; subcommand for various logging manipulation actions
+  - pod               : pod sub-command
   - queue             : list Marathon pending deployments
-  - restart-app       : Restart an app
-  - scale-app         : Scale an app
-  - task              : show info about a specific Marathon task
-  - tasks             : list marathon tasks
 
 For help on commands, $0 <cmd> --help
 
 EOF
 }
 
-task-help() {
+app-edit-help() {
   cat <<EOF
-Show the full JSON details for a Marathon task
+Edit an app definitions JSON
+
+Usage: ${INVOCATION} <app-id> [<options...>]
+
+  - help             : This help
+EOF
+}
+
+pod-help() {
+  cat <<EOF
+Usage: ${INVOCATION} <sub-command> [<options...>]
+
+  - show             : Show a pod
+  - list             : list pods
+  - instance         : Instance sub-commands
+  - delete           : Delete a pod
+  - edit             : Edit a pod JSON definition
+  - help             : This help
+EOF
+}
+
+pod-instance-help() {
+  cat <<EOF
+Usage: ${INVOCATION} <sub-command> [<options...>]
+
+  - list             : list pod instances
+  - kill             : Kill a pod instance
+  - help             : This help
+EOF
+}
+
+
+app-instance-show-help() {
+  cat <<EOF
+Show the full JSON details for a Marathon instance
 
 usage: ${INVOCATION} <id>
 
@@ -66,9 +90,9 @@ usage: ${INVOCATION} <id>
 EOF
 }
 
-restart-app-help() {
+app-restart-help() {
   cat <<EOF
-Restart a Marathon app.
+Restart an app.
 
 usage: ${INVOCATION} <id>
 
@@ -86,9 +110,9 @@ usage: ${INVOCATION} <id>
 EOF
 }
 
-scale-app-help() {
+app-scale-help() {
   cat <<EOF
-Scale a Marathon app
+Scale an app
 
 usage: ${INVOCATION} <app-id> [options]
 
@@ -105,7 +129,7 @@ usage: ${INVOCATION} <app-id> [options]
 EOF
 }
 
-kill-pod-instance-help() {
+pod-instance-kill-help() {
   cat <<EOF
 Kill a Marathon pod
 
@@ -113,7 +137,7 @@ usage: ${INVOCATION} <instance_id>
 
   Options:
 
-  --wipe          - Expunge the task from Marathon; don't reuse it's id. If
+  --wipe          - Expunge the instance from Marathon; don't reuse it's id. If
                     there's an associated persistent volume, delete it.
 
   --no-color      - Force monochrome output.
@@ -122,7 +146,7 @@ usage: ${INVOCATION} <instance_id>
 EOF
 }
 
-kill-tasks-help() {
+app-instance-kill-help() {
   cat <<EOF
 Kill a Marathon task
 
@@ -130,7 +154,7 @@ usage: ${INVOCATION} <id1> <id2> <id3>
 
   Options:
 
-  --wipe          - Expunge the task from Marathon; don't reuse it's id. If
+  --wipe          - Expunge the instance from Marathon; don't reuse it's id. If
                     there's an associated persistent volume, delete it.
 
   --scale         - Adjust the scale of the service as part of this kill
@@ -141,7 +165,7 @@ usage: ${INVOCATION} <id1> <id2> <id3>
 EOF
 }
 
-delete-pod-help() {
+pod-delete-help() {
   cat <<EOF
 Delete a Marathon pod.
 
@@ -158,7 +182,7 @@ usage: ${INVOCATION} <id>
 EOF
 }
 
-delete-app-help() {
+app-delete-help() {
   cat <<EOF
 Delete a Marathon app.
 
@@ -178,7 +202,7 @@ usage: ${INVOCATION} <id>
 EOF
 }
 
-pod-help() {
+pod-show-help() {
   cat <<EOF
 Show the full JSON details for a Marathon pod.
 
@@ -195,7 +219,30 @@ usage: ${INVOCATION} <id>
 EOF
 }
 
+app-instance-help() {
+  cat <<EOF
+Usage: ${INVOCATION} <sub-command> [<options...>]
+
+  - show             : Show instance details
+  - list             : List app instances
+  - help             : This help
+EOF
+}
+
 app-help() {
+  cat <<EOF
+Usage: ${INVOCATION} <sub-command> [<options...>]
+
+  - show             : Show an app
+  - list             : List Marathon apps
+  - instance         : App instance sub-commands
+  - delete           : Delete an app
+  - edit             : Edit an app JSON definition
+  - help             : This help
+EOF
+}
+
+app-show-help() {
   cat <<EOF
 Show the full JSON details for a Marathon app.
 
@@ -212,7 +259,7 @@ usage: ${INVOCATION} <id>
 EOF
 }
 
-task() {
+app-instance-show() {
   declare -a otherargs
   local color_output=""
   if [ -t 1 ]; then
@@ -220,6 +267,7 @@ task() {
   else
     color_output="--monochrome-output"
   fi
+  HELP=app-instance-show-help
 
 
   while ! [ -z "$1" ]; do
@@ -238,7 +286,7 @@ task() {
         ;;
       -*)
         echo "unrecognized argument: $arg" 1>&2
-        task-help
+        $HELP
         exit 1
         ;;
       *)
@@ -249,7 +297,7 @@ task() {
 
   if [ "${#otherargs[@]}" -ne 1 ]; then
     echo "expected one argument specifying an app id; got ${otherargs[@]}"
-    task-help
+    $HELP
     exit 1
   fi
 
@@ -258,12 +306,12 @@ task() {
   marathon-curl "/v2/tasks" | jq $color_output '.tasks[] | select(.id == "'"$task_id"'")'
 }
 
-scale-app() {
+app-scale() {
   local color_output=""
   local force=""
   local instances=""
   local app_id=""
-  local help="scale-app-help"
+  local help="app-scale-help"
   if [ -t 1 ]; then
     color_output="--color-output"
   else
@@ -328,11 +376,11 @@ scale-app() {
   marathon-curl "/v2/apps${app_id}${params}" -X PUT --data '{"instances": '${instances}'}' | jq $color_output '.'
 }
 
-restart-app() {
+app-restart() {
   declare -a otherargs
   local color_output=""
   local force=""
-  local help="restart-app-help"
+  local help="app-restart-help"
   if [ -t 1 ]; then
     color_output="--color-output"
   else
@@ -383,10 +431,10 @@ restart-app() {
   marathon-curl "/v2/apps${app_id}/restart${params}" -X POST | jq $color_output '.'
 }
 
-kill-tasks() {
+app-instance-kill() {
   declare -a task_ids
   local color_output=""
-  local help="kill-tasks-help"
+  local help="app-instance-kill-help"
   declare -a params
   if [ -t 1 ]; then
     color_output="--color-output"
@@ -441,10 +489,10 @@ EOF
   marathon-curl "/v2/tasks/delete?$(join-str "&" "${params[@]}")" --data "${payload}" | jq $color_output '.'
 }
 
-kill-pod-instance() {
+pod-instance-kill() {
   declare -a instance_id
   local color_output=""
-  local help="kill-pod-instance-help"
+  local help="pod-instance-kill-help"
   declare -a params
   if [ -t 1 ]; then
     color_output="--color-output"
@@ -499,11 +547,11 @@ kill-pod-instance() {
   marathon-curl "/v2/pods/${pod_id}::instances/${instance_id}?$(join-str "&" "${params[@]}")" -X DELETE | jq $color_output '.'
 }
 
-delete-pod() {
+pod-delete() {
   declare -a otherargs
   local color_output=""
   local force=""
-  local help="delete-pod-help"
+  local help="pod-delete-help"
   if [ -t 1 ]; then
     color_output="--color-output"
   else
@@ -554,11 +602,11 @@ delete-pod() {
   marathon-curl "/v2/pods${pod_id}" -X DELETE | jq $color_output '.'
 }
 
-delete-app() {
+app-delete() {
   declare -a otherargs
   local color_output=""
   local force=""
-  local help="delete-app-help"
+  local help="app-delete-help"
   if [ -t 1 ]; then
     color_output="--color-output"
   else
@@ -609,79 +657,21 @@ delete-app() {
   marathon-curl "/v2/apps${app_id}${params}" -X DELETE | jq $color_output '.'
 }
 
-pod() {
+app-edit() {
   declare -a otherargs
-  local color_output=""
-  if [ -t 1 ]; then
-    color_output="--color-output"
-  else
-    color_output="--monochrome-output"
-  fi
-
+  help="app-edit-help"
 
   while ! [ -z "$1" ]; do
     arg="$1"
     shift
     case "$arg" in
       --help)
-        inspect-help
+        $help
         exit 0
-        ;;
-      --color)
-        color_output="--color-output"
-        ;;
-      --no-color)
-        color_output="--monochrome-output"
         ;;
       -*)
         echo "unrecognized argument: $arg" 1>&2
-        pod-help
-        exit 1
-        ;;
-      *)
-        otherargs+=("$arg")
-        ;;
-    esac
-  done
-
-  if [ "${#otherargs[@]}" -ne 1 ]; then
-    echo "expected one argument specifying an pod id; got ${otherargs[@]}"
-    pod-help
-    exit 1
-  fi
-
-  pod_id="${otherargs[0]}"
-
-  marathon-curl "/v2/pods${pod_id}" | jq $color_output '.'
-}
-
-app() {
-  declare -a otherargs
-  local color_output=""
-  if [ -t 1 ]; then
-    color_output="--color-output"
-  else
-    color_output="--monochrome-output"
-  fi
-
-
-  while ! [ -z "$1" ]; do
-    arg="$1"
-    shift
-    case "$arg" in
-      --help)
-        inspect-help
-        exit 0
-        ;;
-      --color)
-        color_output="--color-output"
-        ;;
-      --no-color)
-        color_output="--monochrome-output"
-        ;;
-      -*)
-        echo "unrecognized argument: $arg" 1>&2
-        app-help
+        $help
         exit 1
         ;;
       *)
@@ -692,7 +682,231 @@ app() {
 
   if [ "${#otherargs[@]}" -ne 1 ]; then
     echo "expected one argument specifying an app id; got ${otherargs[@]}"
-    app-help
+    $help
+    exit 1
+  fi
+
+  app_id="${otherargs[0]}"
+
+  temp_orig_file=$(mktemp)
+  temp_edit_file=$(mktemp)
+  temp_result=$(mktemp)
+  force_param=""
+  marathon-curl "/v2/apps${app_id}" | jq --monochrome-output '.app | delpaths([["tasks"], ["deployments"], ["tasksUnhealthy"], ["tasksHealthy"], ["tasksRunning"], ["tasksStaged"], ["version"], ["versionInfo"]])' > $temp_orig_file
+  cp $temp_orig_file $temp_edit_file
+
+  do-perform-edit() {
+    ${EDITOR:-vim} $temp_edit_file
+    if (diff -u $temp_edit_file $temp_orig_file); then
+      echo "No changes were made"
+      # exit
+    fi
+    do-post-edit
+  }
+
+  do-post-edit() {
+    marathon-curl "/v2/apps/${app_id}?${force_param}" --no-fail -i -X PUT --data "@${temp_edit_file}" > $temp_result
+
+    LINES=($(wc -l "$temp_result"))
+    head -n $((${LINES[0]} - 2)) $temp_result
+    if (grep "200 OK" $temp_result); then
+      echo
+      echo Success
+    else
+      tail -n 2 $temp_result | jq .
+
+      echo "Retry [yes/no/force]?"
+      read response
+      case $response in
+        force)
+          force_param="force=true"
+          do-post-edit
+          ;;
+        n*)
+          RETRY=false
+          ;;
+        *)
+          do-perform-edit
+          ;;
+      esac
+    fi
+  }
+
+  do-perform-edit
+
+  rm $temp_result
+  rm $temp_edit_file
+  rm $temp_orig_file
+}
+
+pod-edit() {
+  declare -a otherargs
+  help="pod-edit-help"
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        $help
+        exit 0
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      *)
+        otherargs+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#otherargs[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a pod id; got ${otherargs[@]}"
+    $help
+    exit 1
+  fi
+
+  pod_id="${otherargs[0]}"
+
+  temp_orig_file=$(mktemp)
+  temp_edit_file=$(mktemp)
+  temp_result=$(mktemp)
+  force_param=""
+  marathon-curl "/v2/pods${pod_id}" | jq --monochrome-output '.' > $temp_orig_file
+  cp $temp_orig_file $temp_edit_file
+
+  do-perform-edit() {
+    ${EDITOR:-vim} $temp_edit_file
+    if (diff -u $temp_edit_file $temp_orig_file); then
+      echo "No changes were made"
+      # exit
+    fi
+    do-post-edit
+  }
+
+  do-post-edit() {
+    marathon-curl "/v2/pods/${pod_id}?${force_param}" --no-fail -i -X PUT --data "@${temp_edit_file}" > $temp_result
+
+    LINES=($(wc -l "$temp_result"))
+    head -n $((${LINES[0]} - 2)) $temp_result
+    if (grep "200 OK" $temp_result); then
+      echo
+      echo Success
+    else
+      tail -n 2 $temp_result | jq .
+
+      echo "Retry [yes/no/force]?"
+      read response
+      case $response in
+        force)
+          force_param="force=true"
+          do-post-edit
+          ;;
+        n*)
+          RETRY=false
+          ;;
+        *)
+          do-perform-edit
+          ;;
+      esac
+    fi
+  }
+
+  do-perform-edit
+
+  rm $temp_result
+  rm $temp_edit_file
+  rm $temp_orig_file
+}
+
+pod-show() {
+  declare -a otherargs
+  local color_output=""
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+  help="pod-show-help"
+
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        $help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      *)
+        otherargs+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#otherargs[@]}" -ne 1 ]; then
+    echo "expected one argument specifying a pod id; got ${otherargs[@]}"
+    $help
+    exit 1
+  fi
+
+  pod_id="${otherargs[0]}"
+
+  marathon-curl "/v2/pods${pod_id}" | jq $color_output '.'
+}
+
+app-show() {
+  declare -a otherargs
+  local color_output=""
+  if [ -t 1 ]; then
+    color_output="--color-output"
+  else
+    color_output="--monochrome-output"
+  fi
+
+  help="app-show-help"
+
+  while ! [ -z "$1" ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --help)
+        $help
+        exit 0
+        ;;
+      --color)
+        color_output="--color-output"
+        ;;
+      --no-color)
+        color_output="--monochrome-output"
+        ;;
+      -*)
+        echo "unrecognized argument: $arg" 1>&2
+        $help
+        exit 1
+        ;;
+      *)
+        otherargs+=("$arg")
+        ;;
+    esac
+  done
+
+  if [ "${#otherargs[@]}" -ne 1 ]; then
+    echo "expected one argument specifying an app id; got ${otherargs[@]}"
+    $help
     exit 1
   fi
 
@@ -701,7 +915,7 @@ app() {
   marathon-curl "/v2/apps${app_id}" | jq $color_output '.'
 }
 
-tasks-help() {
+app-instance-list-help() {
   cat <<EOF
 List marathon tasks
 
@@ -742,11 +956,11 @@ column list:
 EOF
 }
 
-pod-instances-help() {
+pod-instance-list-help() {
   cat <<EOF
 List Marathon pod instances
 
-usage: ${INVOCATION} [options...]
+usage: ${INVOCATION} list-instances [options...]
 
   Options:
 
@@ -832,7 +1046,7 @@ column list:
 EOF
 }
 
-apps-help() {
+app-list-help() {
   cat <<EOF
 List marathon apps.
 
@@ -891,7 +1105,7 @@ column list:
 EOF
 }
 
-pods-help() {
+pod-list-help() {
   cat <<EOF
 List marathon pods
 
@@ -1010,12 +1224,12 @@ join-str() {
   echo -n "$OUTPUT"
 }
 
-tasks() {
+app-instance-list() {
   declare -a OTHERARGS
   declare -a COLUMNS
   declare -a HEADERS
   declare -a SELECTS
-  local help="tasks-help"
+  local help="app-instance-list-help"
 
   COLUMN_LIST="default"
   NO_HEADER=false
@@ -1147,12 +1361,12 @@ tasks() {
   fi
 }
 
-pod-instances() {
+pod-instance-list() {
   declare -a OTHERARGS
   declare -a COLUMNS
   declare -a HEADERS
   declare -a SELECTS
-  local help="pod-instances-help"
+  local help="pod-instance-list-help"
 
   COLUMN_LIST="default"
   NO_HEADER=false
@@ -1265,7 +1479,7 @@ pod-instances() {
   fi
 }
 
-apps() {
+app-list() {
   declare -a OTHERARGS
   declare -a COLUMNS
   declare -a HEADERS
@@ -1275,6 +1489,7 @@ apps() {
   NO_HEADER=false
   NO_ALIGN=false
   SORT_COLS=id
+  help=apps-list-help
 
   ALIGN_CMD=$'| column -t -s "\t"'
   while ! [ -z "$1" ]; do
@@ -1297,12 +1512,12 @@ apps() {
         ;;
       -*)
         echo "Unrecognized option $arg" 1>&2
-        apps-help
+        $help
         exit 1
         ;;
       *)
         echo "Unexpected argument: $arg" 1>&2
-        apps-help
+        $help
         exit 1
         ;;
     esac
@@ -1455,7 +1670,7 @@ queue() {
           ;;
         id)
           HEADERS+=($col)
-          COLUMNS+=(.app.id)
+          COLUMNS+=('(.app.id // .pod.id)')
           ;;
         processedOffersCount|unusedOffersCount|lastUsedOfferAt)
           HEADERS+=($col)
@@ -1521,7 +1736,7 @@ queue() {
   fi
 }
 
-pods() {
+pod-list() {
   declare -a OTHERARGS
   declare -a COLUMNS
   declare -a HEADERS
@@ -1533,6 +1748,8 @@ pods() {
   SORT_COLS=id
 
   ALIGN_CMD=$'| column -t -s "\t"'
+  help="pod-list-help"
+
   while ! [ -z "$1" ]; do
     arg="$1"
     shift
@@ -1552,12 +1769,12 @@ pods() {
         NO_ALIGN=true
         ;;
       --help)
-        pods-help
+        $help
         exit 1
         ;;
       -*)
         echo "Unrecognized option $arg" 1>&2
-        pods-help
+        $help
         exit 1
         ;;
       *)
@@ -1633,7 +1850,7 @@ pods() {
 
         *)
           echo "Unknown column: $col" 1>&2
-          apps-help
+          $help
           exit 1
           ;;
       esac
@@ -1662,7 +1879,7 @@ pods() {
       SORT_EXP="| sort_by($(join-str , "${SORT_EXPS[@]}"))"
     fi
 
-    marathon-curl "/v2/pods" | jq '. '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
+    marathon-curl "/v2/pods/::status" | jq '. '"$SORT_EXP"' | .[] '"$SELECT_EXP"' | [ '"$(join-str , "${COLUMNS[@]}")"' ] | map(. | tostring) | join("\t")' -r
   }
 
   if $NO_ALIGN; then
@@ -1770,22 +1987,109 @@ logging() {
   esac
 }
 
+pod() {
+  help=pod-help
+  if [ -z "$1" ]; then
+    $help
+    exit 1
+  fi
+
+  subcmd=$1
+  shift
+  INVOCATION="$INVOCATION $subcmd"
+  case "$subcmd" in
+    list) pod-list "$@" ;;
+    instance) pod-instance "$@" ;;
+    delete) pod-delete "$@" ;;
+    show) pod-show "$@" ;;
+    edit) pod-edit "$@" ;;
+    *)
+      echo "Error: subcommand $subcmd not valid"
+      pod-help
+      exit 1
+      ;;
+  esac
+}
+
+app() {
+  help=app-help
+  if [ -z "$1" ]; then
+    $help
+    exit 1
+  fi
+
+  subcmd=$1
+  shift
+  INVOCATION="$INVOCATION $subcmd"
+  case "$subcmd" in
+    list) app-list "$@" ;;
+    instance) app-instance "$@" ;;
+    delete) app-delete "$@" ;;
+    show) app-show "$@" ;;
+    scale) app-scale "$@" ;;
+    edit) app-edit "$@" ;;
+    restart) app-restart "$@" ;;
+    help) $help "$@" ;;
+    *)
+      echo "Error: subcommand $subcmd not valid"
+      pod-help
+      exit 1
+      ;;
+  esac
+}
+
+app-instance() {
+  help=app-instance-help
+  if [ -z "$1" ]; then
+    $help
+    exit 1
+  fi
+
+  subcmd=$1
+  shift
+  INVOCATION="$INVOCATION $subcmd"
+  case "$subcmd" in
+    list) app-instance-list "$@" ;;
+    show) app-instance-show "$@" ;;
+    kill) app-instance-kill "$@" ;;
+    help) $help "$@" ;;
+    *)
+      echo "Error: subcommand $subcmd not valid"
+      pod-help
+      exit 1
+      ;;
+  esac
+}
+
+pod-instance() {
+  help=pod-instance-help
+  if [ -z "$1" ]; then
+    $help
+    exit 1
+  fi
+
+  subcmd=$1
+  shift
+  INVOCATION="$INVOCATION $subcmd"
+  case "$subcmd" in
+    list) pod-instance-list "$@" ;;
+    kill) pod-instance-kill "$@" ;;
+    help) $help "$@" ;;
+    *)
+      echo "Error: subcommand $subcmd not valid"
+      pod-help
+      exit 1
+      ;;
+  esac
+}
+
+
+
 case "$cmd" in
   queue) queue "$@" ;;
-  apps) apps "$@" ;;
   app) app "$@" ;;
-  pods) pods "$@" ;;
   pod) pod "$@" ;;
-  pod-instances) pod-instances "$@" ;;
-  tasks) tasks "$@" ;;
-  task) task "$@" ;;
   curl) marathon-curl "$@" ;;
-  kill|kill-tasks) kill-tasks "$@" ;;
-  kill-pod-instance) kill-pod-instance "$@" ;;
-  delete-app) delete-app "$@" ;;
-  delete-pod) delete-pod "$@" ;;
-  restart-app) restart-app "$@" ;;
-  scale-app) scale-app "$@" ;;
   log) logging "$@" ;;
   *) echo "unrecognized command: $cmd"; help; exit 1 ;;
 esac
