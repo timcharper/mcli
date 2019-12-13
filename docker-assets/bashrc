@@ -1,9 +1,7 @@
 source /usr/share/bash-completion/bash_completion
 source /usr/local/share/bash-completion/mesos-cli-completion
 source /usr/local/share/bash-completion/marathon-cli-completion
-source /usr/local/share/bash-completion/md-completion
 source /usr/local/share/dcos-support
 
-alias dr=md
 alias mcli=mesos-cli
 alias mar=marathon-cli

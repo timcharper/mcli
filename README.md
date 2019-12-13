@@ -16,7 +16,6 @@ By default, it assumes Marathon is running at `http://marathon.mesos:8080`, and 
 
 - `mesos-cli` - A tool for reading and interpreting Mesos HTTP responses (aliased `mcli`)
 - `marathon-cli` - A tool for reading and interpreting Marathon HTTP responses
-- `md` - A Mesos/Marathon enriched docker task inspection tool with a silly name (aliased `dr`)
 
 # Configuration
 
@@ -35,11 +34,11 @@ Mesos CLI has extensive support for bash completion, supporting completion for b
 
 ```
 marathon-cli app <tab><tab>
-marathon-cli task <tab><tab>
-marathon-cli apps -c default,<tab><tab>
+marathon-cli app instance <tab><tab>
+marathon-cli app list -c default,<tab><tab>
 mesos-cli tasks -c default,<tab><tab>
 mesos-cli task <tab><tab>
-marathon-cli apps -<tab><tab>
+marathon-cli app list -<tab><tab>
 ```
 
 # Launching from OS X (without Docker)
